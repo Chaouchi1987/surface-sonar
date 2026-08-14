@@ -1,14 +1,21 @@
-import { Bell, Settings, UserRound, RefreshCw } from "lucide-react";
+import { Bell, RefreshCw } from "lucide-react";
 import { Logo } from "./Logo";
 import { StatusDot } from "./StatusDot";
+import { UserMenu } from "./UserMenu";
 import { useAnalysisStore } from "@/state/analysis-store";
-import { API_BASE_URL } from "@/lib/api/client";
+import { API_BASE_URL, DEMO_MODE } from "@/lib/api/client";
 
-export function TopBar({ onRefreshHealth }: { onRefreshHealth: () => void }) {
-  const { health, healthError, healthChecking, aoi } = useAnalysisStore();
+export function TopBar({
+  onRefreshHealth,
+  onOpenSection,
+}: {
+  onRefreshHealth: () => void;
+  onOpenSection: (id: "project" | "settings") => void;
+}) {
+  const { health, healthError, healthChecking, earthEngine, aoi } = useAnalysisStore();
 
   const backendOnline = !!health && !healthError;
-  const eeReady = !!health?.earth_engine;
+  const eeReady = earthEngine?.status === "ready";
 
   return (
     <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b border-border bg-surface px-4">
@@ -18,6 +25,11 @@ export function TopBar({ onRefreshHealth }: { onRefreshHealth: () => void }) {
           <h1 className="text-sm font-semibold tracking-tight">GeoAnomaly Pro</h1>
           <p className="label-tech">Geospatial Intelligence</p>
         </div>
+        {DEMO_MODE && (
+          <span className="rounded border border-warning/60 bg-warning/15 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-warning">
+            Demo mode — not scientific results
+          </span>
+        )}
       </div>
 
       <div className="hidden min-w-0 flex-1 items-center justify-center gap-3 md:flex">
@@ -41,8 +53,14 @@ export function TopBar({ onRefreshHealth }: { onRefreshHealth: () => void }) {
             }
           />
           <StatusDot
-            tone={eeReady ? "success" : "muted"}
-            label={eeReady ? "Earth Engine Ready" : "Earth Engine Unverified"}
+            tone={eeReady ? "success" : earthEngine?.status === "error" ? "error" : "muted"}
+            label={
+              eeReady
+                ? "Earth Engine Ready"
+                : earthEngine?.status === "error"
+                  ? "Earth Engine Error"
+                  : "Earth Engine Unverified"
+            }
           />
         </div>
         <button
@@ -54,22 +72,14 @@ export function TopBar({ onRefreshHealth }: { onRefreshHealth: () => void }) {
         >
           <RefreshCw className={healthChecking ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
         </button>
-        <div className="flex items-center gap-1">
-          {[
-            { Icon: Bell, label: "Notifications" },
-            { Icon: Settings, label: "Settings" },
-            { Icon: UserRound, label: "User profile" },
-          ].map(({ Icon, label }) => (
-            <button
-              key={label}
-              type="button"
-              aria-label={label}
-              className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-elevated hover:text-foreground"
-            >
-              <Icon className="h-4 w-4" />
-            </button>
-          ))}
-        </div>
+        <button
+          type="button"
+          aria-label="Notifications"
+          className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-elevated hover:text-foreground"
+        >
+          <Bell className="h-4 w-4" />
+        </button>
+        <UserMenu onOpenSection={onOpenSection} />
       </div>
     </header>
   );

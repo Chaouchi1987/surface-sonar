@@ -150,3 +150,94 @@ export interface HealthResponse {
   earth_engine_project?: string;
   version?: string;
 }
+
+/** GET /health */
+export interface BackendHealth {
+  status: "ok" | "degraded" | "error";
+  version?: string;
+}
+
+/** GET /health/earth-engine */
+export interface EarthEngineHealth {
+  status: "ready" | "error" | "unknown";
+  project?: string;
+  message?: string;
+}
+
+/** POST /aoi */
+export interface AoiRequest {
+  latitude: number;
+  longitude: number;
+  radius_m: number;
+  name?: string;
+  scale_m?: number;
+}
+
+export interface AoiResponse {
+  aoi_id: string;
+  center: { lat: number; lon: number };
+  radius_m: number;
+  area_m2: number;
+}
+
+/** POST /analysis/start */
+export interface AnalysisStartRequest {
+  aoi_id: string;
+  scale_m: number;
+  datasets: string[];
+}
+
+export interface AnalysisStartResponse {
+  analysis_id: string;
+}
+
+export type BackendStage =
+  | "queued"
+  | "acquiring_data"
+  | "preprocessing"
+  | "feature_extraction"
+  | "anomaly_detection"
+  | "spatial_clustering"
+  | "geological_analysis"
+  | "temporal_analysis"
+  | "thermal_analysis"
+  | "target_ranking"
+  | "completed"
+  | "failed";
+
+/** GET /analysis/{id}/status */
+export interface AnalysisStatusResponse {
+  analysis_id: string;
+  status: BackendStage;
+  message?: string;
+  stages?: PipelineStage[];
+  started_at?: string;
+  completed_at?: string;
+  processing_time_s?: number;
+}
+
+/** GET /analysis/{id}/datasets */
+export interface DatasetManifestResponse {
+  datasets: (Omit<DatasetInfo, "id" | "family" | "provider"> &
+    Partial<Pick<DatasetInfo, "id" | "family" | "provider">>)[];
+}
+
+/** GET /analysis/{id}/layers */
+export interface LayersResponse {
+  layers: LayerDescriptor[];
+}
+
+/** GET /analysis/{id}/targets */
+export interface TargetsResponse {
+  targets: Target[];
+}
+
+/** POST /analysis/test/sentinel2 */
+export interface Sentinel2TestResponse {
+  dataset: string;
+  feature: string;
+  statistics: { mean: number; min: number; max: number };
+  image_count?: number;
+  date_range?: string;
+  cloud_filter_pct?: number;
+}

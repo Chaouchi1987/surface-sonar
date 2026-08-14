@@ -34,11 +34,11 @@ function Recenter({ lat, lon }: { lat: number | null; lon: number | null }) {
 }
 
 export default function MapCanvas() {
-  const { aoi, layers, targets, showTargetBoxes, selectTarget } = useAnalysisStore();
+  const { aoi, layers, targets, selectTarget } = useAnalysisStore();
   const base = layers.find((l) => l.group === "basemap" && l.visible)?.id ?? "satellite";
   const basemap = BASEMAPS[base] ?? BASEMAPS["satellite"]!;
-  const targetsVisible = layers.find((l) => l.id === "targets")?.visible ?? true;
-  const boxesVisible = (layers.find((l) => l.id === "target_boxes")?.visible ?? true) && showTargetBoxes;
+  const targetsVisible = layers.find((l) => l.id === "targets")?.visible ?? false;
+  const boxesVisible = layers.find((l) => l.id === "target_boxes")?.visible ?? false;
 
   return (
     <MapContainer
