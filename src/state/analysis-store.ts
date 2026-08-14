@@ -31,7 +31,7 @@ export interface MapLayerState {
   opacity: number;
   /** Data-backed layers only become renderable once the backend supplies them. */
   available: boolean;
-  tileUrl?: string;
+  tileUrl?: string | undefined;
 }
 
 export const DEFAULT_STAGES: PipelineStage[] = [
@@ -55,7 +55,6 @@ const STAGE_OF: Partial<Record<BackendStage, PipelineStageId>> = {
   anomaly_detection: "anomaly_detection",
   spatial_clustering: "spatial_clustering",
   target_ranking: "target_ranking",
-  final_targets: "final_targets" as PipelineStageId,
 };
 
 /** Derives the pipeline bar strictly from the state the backend reported. */
@@ -73,7 +72,7 @@ export function stagesFromBackend(status: AnalysisStatusResponse): PipelineStage
     return DEFAULT_STAGES.map((s, i) => ({
       ...s,
       status: i === Math.max(currentIndex, 0) ? ("failed" as const) : ("pending" as const),
-      message: i === Math.max(currentIndex, 0) ? status.message : undefined,
+      ...(i === Math.max(currentIndex, 0) && status.message ? { message: status.message } : {}),
     }));
   }
 
@@ -226,7 +225,12 @@ export const useAnalysisStore = create<AnalysisState>((set) => ({
       layers: s.layers.map((l) => {
         const match = backendLayers.find((b) => b.id === l.id);
         if (!match) return l.group === "basemap" ? l : { ...l, available: false, visible: false };
-        return { ...l, available: true, name: match.name || l.name, tileUrl: match.tile_url };
+        return {
+          ...l,
+          available: true,
+          name: match.name || l.name,
+          ...(match.tile_url ? { tileUrl: match.tile_url } : {}),
+        };
       }),
     })),
   setTargets: (targets) =>
