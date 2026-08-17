@@ -8,6 +8,8 @@ import type {
   DatasetInfo,
   EarthEngineHealth,
   LayerDescriptor,
+  PipelineName,
+  PipelineResult,
   PipelineStage,
   PipelineStageId,
   Sentinel2TestResponse,
@@ -21,6 +23,8 @@ export interface AoiDraft {
   centerLon: number | null;
   radiusM: number;
   scaleM: number;
+  /** Raw GeoJSON geometry when the AOI came from an uploaded file. */
+  geometry?: unknown;
 }
 
 export interface MapLayerState {
@@ -34,12 +38,17 @@ export interface MapLayerState {
   tileUrl?: string | undefined;
 }
 
+/** Canonical orchestrator pipeline. Only stages the backend reports are shown. */
 export const DEFAULT_STAGES: PipelineStage[] = [
   { id: "data_acquisition", label: "Data Acquisition", status: "pending" },
   { id: "preprocessing", label: "Preprocessing", status: "pending" },
   { id: "feature_extraction", label: "Feature Extraction", status: "pending" },
-  { id: "anomaly_detection", label: "Anomaly Detection", status: "pending" },
-  { id: "spatial_clustering", label: "Spatial Clustering", status: "pending" },
+  { id: "geology", label: "Geology", status: "pending" },
+  { id: "temporal", label: "Temporal", status: "pending" },
+  { id: "thermal", label: "Thermal", status: "pending" },
+  { id: "structural", label: "Structural", status: "pending" },
+  { id: "evidence", label: "Evidence", status: "pending" },
+  { id: "intelligence", label: "Intelligence", status: "pending" },
   { id: "target_ranking", label: "Target Ranking", status: "pending" },
   { id: "final_targets", label: "Final Targets", status: "pending" },
 ];
@@ -49,11 +58,14 @@ const STAGE_OF: Partial<Record<BackendStage, PipelineStageId>> = {
   acquiring_data: "data_acquisition",
   preprocessing: "preprocessing",
   feature_extraction: "feature_extraction",
-  geological_analysis: "feature_extraction",
-  temporal_analysis: "feature_extraction",
-  thermal_analysis: "feature_extraction",
-  anomaly_detection: "anomaly_detection",
-  spatial_clustering: "spatial_clustering",
+  anomaly_detection: "feature_extraction",
+  geological_analysis: "geology",
+  temporal_analysis: "temporal",
+  thermal_analysis: "thermal",
+  structural_analysis: "structural",
+  spatial_clustering: "evidence",
+  evidence_fusion: "evidence",
+  intelligence_analysis: "intelligence",
   target_ranking: "target_ranking",
 };
 
@@ -116,6 +128,18 @@ const initialLayers: MapLayerState[] = CATALOG_LAYERS.map((l) => ({
   opacity: 1,
 }));
 
+/** Sort helper: intelligence score first, then backend rank. */
+export function sortTargets(targets: Target[]): Target[] {
+  return [...targets].sort((a, b) => {
+    const ai = a.intelligence_score ?? a.scores?.intelligence;
+    const bi = b.intelligence_score ?? b.scores?.intelligence;
+    if (typeof ai === "number" && typeof bi === "number" && ai !== bi) return bi - ai;
+    if (typeof ai === "number" && typeof bi !== "number") return -1;
+    if (typeof bi === "number" && typeof ai !== "number") return 1;
+    return a.rank - b.rank;
+  });
+}
+
 interface AnalysisState {
   health: BackendHealth | null;
   healthError: string | null;
@@ -132,12 +156,15 @@ interface AnalysisState {
   analysisStatus: BackendStage | "idle";
   analysisMessage: string | null;
   processingTimeS: number | null;
+  startedAt: string | null;
+  completedAt: string | null;
   stages: PipelineStage[];
   datasets: DatasetInfo[];
   layers: MapLayerState[];
   targets: Target[];
   targetsReported: boolean;
   selectedTargetId: string | null;
+  pipelineResults: Partial<Record<PipelineName, PipelineResult>>;
   ndviTest: Sentinel2TestResponse | null;
   errors: string[];
   apiLog: ApiLogEntry[];
@@ -154,6 +181,7 @@ interface AnalysisState {
   setDatasets: (datasets: DatasetInfo[]) => void;
   applyBackendLayers: (layers: LayerDescriptor[]) => void;
   setTargets: (targets: Target[]) => void;
+  setPipelineResult: (result: PipelineResult) => void;
   setNdviTest: (result: Sentinel2TestResponse | null) => void;
   selectTarget: (id: string | null) => void;
   toggleLayer: (id: string) => void;
@@ -186,12 +214,15 @@ export const useAnalysisStore = create<AnalysisState>((set) => ({
   analysisStatus: "idle",
   analysisMessage: null,
   processingTimeS: null,
+  startedAt: null,
+  completedAt: null,
   stages: DEFAULT_STAGES,
   datasets: [],
   layers: initialLayers,
   targets: [],
   targetsReported: false,
   selectedTargetId: null,
+  pipelineResults: {},
   ndviTest: null,
   errors: [],
   apiLog: [],
@@ -215,8 +246,10 @@ export const useAnalysisStore = create<AnalysisState>((set) => ({
     set({
       analysisId: status.analysis_id,
       analysisStatus: status.status,
-      analysisMessage: status.message ?? null,
+      analysisMessage: status.message ?? status.error ?? null,
       processingTimeS: status.processing_time_s ?? null,
+      startedAt: status.started_at ?? null,
+      completedAt: status.completed_at ?? null,
       stages: stagesFromBackend(status),
     }),
   setDatasets: (datasets) => set({ datasets }),
@@ -234,16 +267,21 @@ export const useAnalysisStore = create<AnalysisState>((set) => ({
       }),
     })),
   setTargets: (targets) =>
-    set((s) => ({
-      targets,
-      targetsReported: true,
-      selectedTargetId: targets[0]?.target_id ?? null,
-      layers: s.layers.map((l) =>
-        l.group === "vector"
-          ? { ...l, available: targets.length > 0, visible: targets.length > 0 }
-          : l,
-      ),
-    })),
+    set((s) => {
+      const sorted = sortTargets(targets);
+      return {
+        targets: sorted,
+        targetsReported: true,
+        selectedTargetId: sorted[0]?.target_id ?? null,
+        layers: s.layers.map((l) =>
+          l.group === "vector"
+            ? { ...l, available: sorted.length > 0, visible: sorted.length > 0 }
+            : l,
+        ),
+      };
+    }),
+  setPipelineResult: (result) =>
+    set((s) => ({ pipelineResults: { ...s.pipelineResults, [result.pipeline]: result } })),
   setNdviTest: (ndviTest) => set({ ndviTest }),
   selectTarget: (selectedTargetId) => set({ selectedTargetId }),
   toggleLayer: (id) =>
@@ -271,11 +309,14 @@ export const useAnalysisStore = create<AnalysisState>((set) => ({
       analysisStatus: "idle",
       analysisMessage: null,
       processingTimeS: null,
+      startedAt: null,
+      completedAt: null,
       stages: DEFAULT_STAGES,
       datasets: [],
       targets: [],
       targetsReported: false,
       selectedTargetId: null,
+      pipelineResults: {},
       ndviTest: null,
       errors: [],
       layers: initialLayers,

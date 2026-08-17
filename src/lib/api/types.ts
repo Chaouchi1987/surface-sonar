@@ -47,14 +47,26 @@ export interface DatasetInfo {
   note?: string;
 }
 
+/**
+ * Full pipeline as orchestrated by the backend:
+ * acquisition → preprocessing → features → geology → temporal → thermal →
+ * structural → evidence → intelligence → ranking → final targets.
+ */
 export type PipelineStageId =
   | "data_acquisition"
   | "preprocessing"
   | "feature_extraction"
-  | "anomaly_detection"
-  | "spatial_clustering"
+  | "geology"
+  | "temporal"
+  | "thermal"
+  | "structural"
+  | "evidence"
+  | "intelligence"
   | "target_ranking"
-  | "final_targets";
+  | "final_targets"
+  // legacy ids still accepted from older backend builds
+  | "anomaly_detection"
+  | "spatial_clustering";
 
 export type StageStatus = "pending" | "running" | "complete" | "failed" | "skipped";
 
@@ -63,6 +75,10 @@ export interface PipelineStage {
   label: string;
   status: StageStatus;
   message?: string;
+  /** 0–1, reported by the backend only. Never interpolated client-side. */
+  progress?: number;
+  started_at?: string;
+  completed_at?: string;
 }
 
 export type AnalysisStatus =
@@ -110,6 +126,30 @@ export type Interpretation =
   | "mixed_uncertain"
   | "insufficient_evidence";
 
+/** Single evidence record produced by one of the scientific pipelines. */
+export interface EvidenceItem {
+  channel: EvidenceChannel | string;
+  /** Human readable statement produced by the backend. */
+  description: string;
+  /** 0–1 as scored by the backend. Optional — absence means "not scored". */
+  score?: number;
+  /** Which dataset / feature backs this statement. */
+  source?: string;
+  /** Backend-declared strength; never derived in the browser. */
+  strength?: "weak" | "moderate" | "strong";
+}
+
+/** Normalised score bundle. Missing keys mean the pipeline did not run. */
+export interface TargetScores {
+  anomaly?: number;
+  statistical?: number;
+  geological?: number;
+  thermal?: number;
+  temporal?: number;
+  structural?: number;
+  intelligence?: number;
+}
+
 export interface Target {
   target_id: string;
   rank: number;
@@ -123,8 +163,18 @@ export interface Target {
   thermal_score?: number;
   temporal_score?: number;
   structural_score?: number;
+  /** Composite score produced by the AI / intelligence pipeline. */
   intelligence_score?: number;
+  /** Optional structured bundle; falls back to the flat *_score fields. */
+  scores?: TargetScores;
   model_agreement?: number;
+  /** 0–1 confidence reported by the backend, if it computes one. */
+  confidence?: number;
+  /** Backend classification label, e.g. "structural_lineament". */
+  category?: string;
+  /** Explicit distinction between a measured anomaly and an interpretation. */
+  evidence_class?: "anomaly" | "hypothesis";
+  evidence?: EvidenceItem[];
   data_quality?: DataQuality;
   interpretation: Interpretation;
   supporting_features: string[];
@@ -155,6 +205,9 @@ export interface HealthResponse {
 export interface BackendHealth {
   status: "ok" | "degraded" | "error";
   version?: string;
+  /** Some builds report EE inline on /health. Both shapes are tolerated. */
+  earth_engine?: boolean;
+  earth_engine_project?: string;
 }
 
 /** GET /health/earth-engine */
@@ -171,6 +224,8 @@ export interface AoiRequest {
   radius_m: number;
   name?: string;
   scale_m?: number;
+  shape?: AoiShape;
+  geometry?: AoiGeometry;
 }
 
 export interface AoiResponse {
@@ -185,11 +240,21 @@ export interface AnalysisStartRequest {
   aoi_id: string;
   scale_m: number;
   datasets: string[];
+  /** Optional orchestrator hints — the backend decides what actually runs. */
+  pipelines?: PipelineName[];
+  scales_m?: number[];
 }
 
 export interface AnalysisStartResponse {
   analysis_id: string;
 }
+
+export type PipelineName =
+  | "geology"
+  | "temporal"
+  | "thermal"
+  | "structural"
+  | "intelligence";
 
 export type BackendStage =
   | "queued"
@@ -201,6 +266,9 @@ export type BackendStage =
   | "geological_analysis"
   | "temporal_analysis"
   | "thermal_analysis"
+  | "structural_analysis"
+  | "evidence_fusion"
+  | "intelligence_analysis"
   | "target_ranking"
   | "completed"
   | "failed";
@@ -214,6 +282,36 @@ export interface AnalysisStatusResponse {
   started_at?: string;
   completed_at?: string;
   processing_time_s?: number;
+  error?: string;
+}
+
+/** GET /analysis/{id} — full orchestrator result, when the backend exposes it. */
+export interface AnalysisResult {
+  analysis_id: string;
+  status: BackendStage;
+  aoi?: AoiResponse;
+  stages?: PipelineStage[];
+  datasets?: DatasetInfo[];
+  layers?: LayerDescriptor[];
+  targets?: Target[];
+  data_quality?: DataQuality;
+  methodology?: string[];
+  limitations?: string[];
+  started_at?: string;
+  completed_at?: string;
+  processing_time_s?: number;
+}
+
+/** Result envelope shared by the geology / temporal / intelligence pipelines. */
+export interface PipelineResult {
+  analysis_id: string;
+  pipeline: PipelineName;
+  status: "complete" | "failed" | "skipped" | "running";
+  message?: string;
+  layers?: LayerDescriptor[];
+  evidence?: EvidenceItem[];
+  metrics?: Record<string, number | string>;
+  limitations?: string[];
 }
 
 /** GET /analysis/{id}/datasets */
@@ -241,3 +339,10 @@ export interface Sentinel2TestResponse {
   date_range?: string;
   cloud_filter_pct?: number;
 }
+
+/** Generic four-state resource envelope used across the UI. */
+export type RemoteState<T> =
+  | { state: "unavailable"; reason: string }
+  | { state: "loading" }
+  | { state: "success"; data: T }
+  | { state: "error"; message: string; status?: number };
