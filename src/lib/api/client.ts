@@ -1,11 +1,47 @@
 /**
  * Thin HTTP client for the external Python/FastAPI scientific backend.
- * The base URL is configured via VITE_API_BASE_URL (e.g. http://localhost:8000).
- * No scientific value is ever fabricated here — failures surface as errors.
+ * The base URL comes from VITE_API_BASE_URL and can be overridden at runtime
+ * (Settings → Backend). No secret is ever stored in the browser and no
+ * scientific value is ever fabricated here — failures surface as errors.
  */
 
-export const API_BASE_URL: string =
+const ENV_BASE_URL: string =
   (import.meta.env["VITE_API_BASE_URL"] as string | undefined)?.replace(/\/$/, "") ?? "";
+
+const OVERRIDE_KEY = "geoanomaly.api_base_url";
+
+function readOverride(): string {
+  if (typeof window === "undefined") return "";
+  try {
+    return window.localStorage.getItem(OVERRIDE_KEY)?.replace(/\/$/, "") ?? "";
+  } catch {
+    return "";
+  }
+}
+
+let override = readOverride();
+
+/** Current effective base URL (runtime override wins over the env value). */
+export function getApiBaseUrl(): string {
+  return override || ENV_BASE_URL;
+}
+
+/** Persist a runtime base URL. Pass an empty string to fall back to the env. */
+export function setApiBaseUrl(url: string): string {
+  override = url.trim().replace(/\/$/, "");
+  try {
+    if (override) window.localStorage.setItem(OVERRIDE_KEY, override);
+    else window.localStorage.removeItem(OVERRIDE_KEY);
+  } catch {
+    /* storage unavailable — keep the in-memory value only */
+  }
+  return getApiBaseUrl();
+}
+
+export const ENV_API_BASE_URL = ENV_BASE_URL;
+
+/** @deprecated prefer getApiBaseUrl() so runtime overrides are respected. */
+export const API_BASE_URL: string = ENV_BASE_URL;
 
 /** Demo mode is opt-in and never enabled in production builds by default. */
 export const DEMO_MODE: boolean =
@@ -27,7 +63,12 @@ export const BACKEND_UNCONFIGURED =
   "Backend unavailable — no scientific analysis can be performed.";
 
 export const BACKEND_NOT_SET =
-  "VITE_API_BASE_URL is not configured. Point it at your FastAPI server (e.g. http://localhost:8000).";
+  "Backend base URL is not configured. Set VITE_API_BASE_URL or enter it in Settings → Backend (e.g. http://localhost:8000).";
+
+/** True when a request failed because the endpoint does not exist yet. */
+export function isNotImplemented(error: unknown): boolean {
+  return error instanceof ApiError && (error.status === 404 || error.status === 501);
+}
 
 export interface ApiLogEntry {
   id: string;
@@ -59,16 +100,17 @@ export async function apiFetch<T>(
   init: RequestInit & { timeoutMs?: number } = {},
 ): Promise<T> {
   const method = (init.method ?? "GET").toUpperCase();
+  const baseUrl = getApiBaseUrl();
   const startedAt = performance.now();
   const base = {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     method,
     endpoint: path,
-    url: `${API_BASE_URL}${path}`,
+    url: `${baseUrl}${path}`,
     at: new Date().toISOString(),
   };
 
-  if (!API_BASE_URL) {
+  if (!baseUrl) {
     emit({
       ...base,
       status: null,
@@ -84,7 +126,7 @@ export async function apiFetch<T>(
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const response = await fetch(`${API_BASE_URL}${path}`, {
+    const response = await fetch(`${baseUrl}${path}`, {
       ...rest,
       signal: controller.signal,
       headers: {
@@ -124,7 +166,7 @@ export async function apiFetch<T>(
     const timedOut = error instanceof DOMException && error.name === "AbortError";
     const message = timedOut
       ? "Backend request timed out — analysis state unknown."
-      : `Cannot reach backend at ${API_BASE_URL}${path}. ${BACKEND_UNCONFIGURED}`;
+      : `Cannot reach backend at ${baseUrl}${path}. ${BACKEND_UNCONFIGURED}`;
     emit({ ...base, status: null, durationMs, ok: false, error: message });
     throw new ApiError(message, undefined, undefined, path);
   } finally {
