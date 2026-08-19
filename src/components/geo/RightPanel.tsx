@@ -278,3 +278,39 @@ function Block({
     </div>
   );
 }
+
+function ScoreRow({ label, value }: { label: string; value?: number | undefined }) {
+  if (typeof value !== "number") return null;
+  return (
+    <div className="flex items-baseline justify-between gap-3">
+      <dt className="label-tech">{label}</dt>
+      <dd className="mono-coord text-[11px] text-secondary-foreground">{value.toFixed(3)}</dd>
+    </div>
+  );
+}
+
+function EvidenceList({ items }: { items?: Target["evidence"] }) {
+  if (!items?.length) return null;
+  return (
+    <div>
+      <p className="label-tech">Evidence records (backend)</p>
+      <ul className="mt-1 space-y-1.5">
+        {items.map((e, i) => (
+          <li key={`${e.channel}-${i}`} className="rounded border border-border p-2">
+            <p className="mono-coord text-[10px] uppercase text-accent">
+              {String(e.channel).replace(/_/g, " ")}
+              {e.strength ? ` · ${e.strength}` : ""}
+              {typeof e.score === "number" ? ` · ${e.score.toFixed(3)}` : ""}
+            </p>
+            <p className="mt-0.5 text-[11.5px] leading-relaxed text-secondary-foreground">
+              {e.description}
+            </p>
+            {e.source && (
+              <p className="mono-coord mt-0.5 text-[10px] text-muted-foreground">{e.source}</p>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
