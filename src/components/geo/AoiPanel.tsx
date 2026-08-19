@@ -106,11 +106,11 @@ export function AoiPanel({
         <input
           id="aoi-radius"
           type="range"
-          min={25}
-          max={5000}
-          step={25}
+          min={10}
+          max={500}
+          step={5}
           value={aoi.radiusM}
-          onChange={(e) => patchAoi({ radiusM: Number(e.target.value) })}
+          onChange={(e) => patchAoi({ radiusM: Math.min(500, Math.max(10, Number(e.target.value))) })}
           className="mt-2 w-full accent-[var(--color-primary)]"
         />
       </div>

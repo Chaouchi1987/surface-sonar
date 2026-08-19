@@ -1,6 +1,5 @@
 import {
   Activity,
-  CircleX,
   Database,
   FileText,
   History,
