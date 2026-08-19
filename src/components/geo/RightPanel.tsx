@@ -156,17 +156,50 @@ function TargetDetail({ target }: { target: Target }) {
 
   return (
     <div className="mt-4 space-y-3 rounded-md border border-border bg-background/60 p-3">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <h3 className="text-[13px] font-semibold">Target #{target.rank}</h3>
-        <span className="mono-coord rounded border border-border px-1.5 py-0.5 text-[10px] uppercase text-muted-foreground">
-          {target.interpretation.replace(/_/g, " ")}
-        </span>
+        <div className="flex flex-wrap justify-end gap-1">
+          {target.evidence_class && (
+            <span
+              className={cn(
+                "mono-coord rounded border px-1.5 py-0.5 text-[10px] uppercase",
+                target.evidence_class === "anomaly"
+                  ? "border-anomaly/60 text-anomaly"
+                  : "border-warning/60 text-warning",
+              )}
+            >
+              {target.evidence_class === "anomaly" ? "measured anomaly" : "hypothesis"}
+            </span>
+          )}
+          <span className="mono-coord rounded border border-border px-1.5 py-0.5 text-[10px] uppercase text-muted-foreground">
+            {target.interpretation.replace(/_/g, " ")}
+          </span>
+        </div>
       </div>
+
+      {target.category && (
+        <p className="mono-coord text-[11px] text-secondary-foreground">
+          Category: {target.category.replace(/_/g, " ")}
+        </p>
+      )}
 
       <div className="mono-coord space-y-0.5 text-[11.5px] text-secondary-foreground">
         <div>{formatCoord(target.latitude, "lat")}</div>
         <div>{formatCoord(target.longitude, "lon")}</div>
+        <div className="text-[10.5px] text-muted-foreground">
+          {target.latitude}, {target.longitude}
+        </div>
       </div>
+
+      <dl className="space-y-1 rounded border border-border bg-background/40 p-2">
+        <ScoreRow label="Intelligence" value={target.intelligence_score ?? target.scores?.intelligence} />
+        <ScoreRow label="Geology" value={target.geological_score ?? target.scores?.geological} />
+        <ScoreRow label="Temporal" value={target.temporal_score ?? target.scores?.temporal} />
+        <ScoreRow label="Thermal" value={target.thermal_score ?? target.scores?.thermal} />
+        <ScoreRow label="Structural" value={target.structural_score ?? target.scores?.structural} />
+        <ScoreRow label="Confidence" value={target.confidence} />
+      </dl>
+
 
       <div className="rounded border border-target/40 bg-target/5 p-2">
         <p className="label-tech">10 m × 10 m investigation box</p>
