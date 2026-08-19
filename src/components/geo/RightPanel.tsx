@@ -87,7 +87,8 @@ export function RightPanel() {
           <TargetIcon className="h-3.5 w-3.5" /> Target ranking
         </h2>
         {targets.length === 0 ? (
-          <EmptyTargets />
+          <EmptyTargets reported={targetsReported} />
+
         ) : (
           <>
             <ul className="mt-2 space-y-1.5">
