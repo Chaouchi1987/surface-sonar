@@ -61,21 +61,8 @@ export function SectionPanel({
 
   return (
     <div className="w-[320px] shrink-0 overflow-y-auto border-r border-border bg-panel p-4">
-      {errors.length > 0 && (
-        <div className="mb-4 rounded-md border border-destructive/50 bg-destructive/10 p-3">
-          <p className="flex items-center gap-1.5 text-[12px] font-semibold text-destructive">
-            <CircleX className="h-3.5 w-3.5" /> Analysis unavailable
-          </p>
-          {errors.map((e) => (
-            <p key={e} className="mt-1 text-[11.5px] leading-relaxed text-secondary-foreground">
-              {e}
-            </p>
-          ))}
-          <p className="mt-1.5 text-[11px] text-muted-foreground">
-            No scientific target has been generated.
-          </p>
-        </div>
-      )}
+      {errors.length > 0 && <AnalysisErrorCard onRetry={onRunAnalysis} />}
+
 
       {section === "aoi" && <AoiPanel onRunAnalysis={onRunAnalysis} running={running} />}
 
