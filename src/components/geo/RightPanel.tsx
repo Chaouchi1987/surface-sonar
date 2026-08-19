@@ -15,8 +15,17 @@ import { cn } from "@/lib/utils";
 import { EvidenceBars } from "./EvidenceBars";
 
 export function RightPanel() {
-  const { targets, selectedTargetId, selectTarget, analysisStatus, layers, datasets, lastRun } =
-    useAnalysisStore();
+  const {
+    targets,
+    selectedTargetId,
+    selectTarget,
+    analysisStatus,
+    layers,
+    datasets,
+    processingTimeS,
+    completedAt,
+    targetsReported,
+  } = useAnalysisStore();
   const selected = targets.find((t) => t.target_id === selectedTargetId) ?? targets[0] ?? null;
   const activeLayers = layers.filter((l) => l.visible);
 
@@ -28,11 +37,16 @@ export function RightPanel() {
       <section>
         <h2 className="label-tech">Analysis status</h2>
         <p className="mt-1 text-[13px] capitalize text-secondary-foreground">
-          {analysisStatus.replace("_", " ")}
+          {analysisStatus.replace(/_/g, " ")}
         </p>
-        {lastRun?.processing_time_s !== undefined && (
+        {processingTimeS !== null && (
           <p className="mono-coord mt-0.5 text-[11px] text-muted-foreground">
-            {lastRun.processing_time_s.toFixed(1)} s processing time
+            {processingTimeS.toFixed(1)} s processing time
+          </p>
+        )}
+        {completedAt && (
+          <p className="mono-coord mt-0.5 text-[11px] text-muted-foreground">
+            Completed {new Date(completedAt).toLocaleString()}
           </p>
         )}
       </section>
@@ -73,7 +87,8 @@ export function RightPanel() {
           <TargetIcon className="h-3.5 w-3.5" /> Target ranking
         </h2>
         {targets.length === 0 ? (
-          <EmptyTargets />
+          <EmptyTargets reported={targetsReported} />
+
         ) : (
           <>
             <ul className="mt-2 space-y-1.5">
@@ -115,18 +130,22 @@ export function RightPanel() {
   );
 }
 
-function EmptyTargets() {
+function EmptyTargets({ reported }: { reported: boolean }) {
   return (
     <div className="mt-3 rounded-md border border-dashed border-border p-4 text-center">
       <ScanLine className="mx-auto h-5 w-5 text-muted-foreground" />
-      <p className="mt-2 text-[12.5px] text-secondary-foreground">No analysis available</p>
+      <p className="mt-2 text-[12.5px] text-secondary-foreground">
+        {reported ? "No scientifically supported target zones identified" : "No analysis available"}
+      </p>
       <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-        Define an AOI and run a scientific analysis. Targets appear only when the backend
-        returns evidence-supported zones.
+        {reported
+          ? "The backend completed the run and returned zero evidence-supported zones. An empty result is a valid scientific outcome."
+          : "Define an AOI and run a scientific analysis. Targets appear only when the backend returns evidence-supported zones."}
       </p>
     </div>
   );
 }
+
 
 function TargetDetail({ target }: { target: Target }) {
   const [[minLat, minLon], [maxLat, maxLon]] = boxAround(
@@ -137,17 +156,50 @@ function TargetDetail({ target }: { target: Target }) {
 
   return (
     <div className="mt-4 space-y-3 rounded-md border border-border bg-background/60 p-3">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <h3 className="text-[13px] font-semibold">Target #{target.rank}</h3>
-        <span className="mono-coord rounded border border-border px-1.5 py-0.5 text-[10px] uppercase text-muted-foreground">
-          {target.interpretation.replace(/_/g, " ")}
-        </span>
+        <div className="flex flex-wrap justify-end gap-1">
+          {target.evidence_class && (
+            <span
+              className={cn(
+                "mono-coord rounded border px-1.5 py-0.5 text-[10px] uppercase",
+                target.evidence_class === "anomaly"
+                  ? "border-anomaly/60 text-anomaly"
+                  : "border-warning/60 text-warning",
+              )}
+            >
+              {target.evidence_class === "anomaly" ? "measured anomaly" : "hypothesis"}
+            </span>
+          )}
+          <span className="mono-coord rounded border border-border px-1.5 py-0.5 text-[10px] uppercase text-muted-foreground">
+            {target.interpretation.replace(/_/g, " ")}
+          </span>
+        </div>
       </div>
+
+      {target.category && (
+        <p className="mono-coord text-[11px] text-secondary-foreground">
+          Category: {target.category.replace(/_/g, " ")}
+        </p>
+      )}
 
       <div className="mono-coord space-y-0.5 text-[11.5px] text-secondary-foreground">
         <div>{formatCoord(target.latitude, "lat")}</div>
         <div>{formatCoord(target.longitude, "lon")}</div>
+        <div className="text-[10.5px] text-muted-foreground">
+          {target.latitude}, {target.longitude}
+        </div>
       </div>
+
+      <dl className="space-y-1 rounded border border-border bg-background/40 p-2">
+        <ScoreRow label="Intelligence" value={target.intelligence_score ?? target.scores?.intelligence} />
+        <ScoreRow label="Geology" value={target.geological_score ?? target.scores?.geological} />
+        <ScoreRow label="Temporal" value={target.temporal_score ?? target.scores?.temporal} />
+        <ScoreRow label="Thermal" value={target.thermal_score ?? target.scores?.thermal} />
+        <ScoreRow label="Structural" value={target.structural_score ?? target.scores?.structural} />
+        <ScoreRow label="Confidence" value={target.confidence} />
+      </dl>
+
 
       <div className="rounded border border-target/40 bg-target/5 p-2">
         <p className="label-tech">10 m × 10 m investigation box</p>
@@ -178,6 +230,9 @@ function TargetDetail({ target }: { target: Target }) {
       </div>
 
       <EvidenceBars target={target} />
+
+      <EvidenceList items={target.evidence} />
+
 
       <Block title="Supporting evidence" items={target.supporting_features} />
       <Block title="Data sources" items={target.data_sources} />
@@ -220,6 +275,42 @@ function Block({
           >
             {tone === "warning" ? "• " : "✓ "}
             {item}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function ScoreRow({ label, value }: { label: string; value?: number | undefined }) {
+  if (typeof value !== "number") return null;
+  return (
+    <div className="flex items-baseline justify-between gap-3">
+      <dt className="label-tech">{label}</dt>
+      <dd className="mono-coord text-[11px] text-secondary-foreground">{value.toFixed(3)}</dd>
+    </div>
+  );
+}
+
+function EvidenceList({ items }: { items?: Target["evidence"] }) {
+  if (!items?.length) return null;
+  return (
+    <div>
+      <p className="label-tech">Evidence records (backend)</p>
+      <ul className="mt-1 space-y-1.5">
+        {items.map((e, i) => (
+          <li key={`${e.channel}-${i}`} className="rounded border border-border p-2">
+            <p className="mono-coord text-[10px] uppercase text-accent">
+              {String(e.channel).replace(/_/g, " ")}
+              {e.strength ? ` · ${e.strength}` : ""}
+              {typeof e.score === "number" ? ` · ${e.score.toFixed(3)}` : ""}
+            </p>
+            <p className="mt-0.5 text-[11.5px] leading-relaxed text-secondary-foreground">
+              {e.description}
+            </p>
+            {e.source && (
+              <p className="mono-coord mt-0.5 text-[10px] text-muted-foreground">{e.source}</p>
+            )}
           </li>
         ))}
       </ul>

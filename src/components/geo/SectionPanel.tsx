@@ -1,6 +1,5 @@
 import {
   Activity,
-  CircleX,
   Database,
   FileText,
   History,
@@ -12,7 +11,11 @@ import {
 import type { SectionId } from "./Sidebar";
 import { AoiPanel } from "./AoiPanel";
 import { useAnalysisStore } from "@/state/analysis-store";
-import { API_BASE_URL } from "@/lib/api/client";
+import { getApiBaseUrl } from "@/lib/api/client";
+import { BackendSettings } from "./BackendSettings";
+import { ProjectsPanel } from "./ProjectsPanel";
+import { DebugPanel } from "./DebugPanel";
+import { AnalysisErrorCard } from "./AnalysisErrorCard";
 
 const CATALOG: { group: string; items: { name: string; badge: string }[] }[] = [
   {
@@ -52,25 +55,13 @@ export function SectionPanel({
   onRunAnalysis: () => void;
   running: boolean;
 }) {
-  const { datasets, errors, analysisId, analysisStatus, lastRun, health } = useAnalysisStore();
+  const { datasets, errors, analysisId, analysisStatus, completedAt, processingTimeS, health } =
+    useAnalysisStore();
 
   return (
     <div className="w-[320px] shrink-0 overflow-y-auto border-r border-border bg-panel p-4">
-      {errors.length > 0 && (
-        <div className="mb-4 rounded-md border border-destructive/50 bg-destructive/10 p-3">
-          <p className="flex items-center gap-1.5 text-[12px] font-semibold text-destructive">
-            <CircleX className="h-3.5 w-3.5" /> Analysis unavailable
-          </p>
-          {errors.map((e) => (
-            <p key={e} className="mt-1 text-[11.5px] leading-relaxed text-secondary-foreground">
-              {e}
-            </p>
-          ))}
-          <p className="mt-1.5 text-[11px] text-muted-foreground">
-            No scientific target has been generated.
-          </p>
-        </div>
-      )}
+      {errors.length > 0 && <AnalysisErrorCard onRetry={onRunAnalysis} />}
+
 
       {section === "aoi" && <AoiPanel onRunAnalysis={onRunAnalysis} running={running} />}
 
@@ -80,17 +71,19 @@ export function SectionPanel({
           title="Project"
           rows={[
             ["Project", "Untitled project"],
-            ["Backend", API_BASE_URL || "VITE_API_BASE_URL not set"],
+            ["Backend", getApiBaseUrl() || "VITE_API_BASE_URL not set"],
             ["Analysis ID", analysisId ?? "—"],
             ["Status", analysisStatus],
-            ["Last analysis", lastRun?.completed_at ?? "No analysis available"],
+            ["Last analysis", completedAt ?? "No analysis available"],
             [
               "Processing time",
-              lastRun?.processing_time_s ? `${lastRun.processing_time_s}s` : "No analysis available",
+              processingTimeS !== null ? `${processingTimeS}s` : "No analysis available",
             ],
           ]}
         />
       )}
+
+      {section === "project" && <div className="mt-4"><ProjectsPanel /></div>}
 
       {section === "data" && (
         <section className="space-y-4">
@@ -202,11 +195,18 @@ export function SectionPanel({
       )}
 
       {section === "settings" && (
+        <div className="space-y-5">
+          <BackendSettings />
+          <DebugPanel />
+        </div>
+      )}
+
+      {section === "settings" && (
         <Stack
           icon={SettingsIcon}
           title="Settings"
           rows={[
-            ["API base URL", API_BASE_URL || "Not configured"],
+            ["API base URL", getApiBaseUrl() || "Not configured"],
             ["Credential storage", "Backend only"],
             ["CRS", "EPSG:4326"],
           ]}

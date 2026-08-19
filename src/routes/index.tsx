@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { TopBar } from "@/components/geo/TopBar";
 import { Sidebar, type SectionId } from "@/components/geo/Sidebar";
 import { SectionPanel } from "@/components/geo/SectionPanel";
@@ -7,8 +7,14 @@ import { MapPane } from "@/components/geo/MapPane";
 import { RightPanel } from "@/components/geo/RightPanel";
 import { PipelineBar } from "@/components/geo/PipelineBar";
 import { useAnalysisStore } from "@/state/analysis-store";
-import { analysisService, healthService } from "@/lib/api/services";
-import { ApiError, BACKEND_UNCONFIGURED } from "@/lib/api/client";
+import {
+  analysisService,
+  aoiService,
+  healthService,
+  layerService,
+  targetService,
+} from "@/services";
+import { ApiError, BACKEND_UNCONFIGURED, isNotImplemented, onApiLog } from "@/lib/api/client";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -32,56 +38,188 @@ export const Route = createFileRoute("/")({
   component: Workstation,
 });
 
+const POLL_INTERVAL_MS = 3000;
+const TERMINAL = new Set(["completed", "failed"]);
+
+function message(error: unknown): string {
+  return error instanceof ApiError ? error.message : BACKEND_UNCONFIGURED;
+}
+
 function Workstation() {
   const [section, setSection] = useState<SectionId>("aoi");
   const [collapsed, setCollapsed] = useState(false);
   const [running, setRunning] = useState(false);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const { aoi, stages, setHealth, setHealthChecking, applyRun, setAnalysisError, clearErrors } =
-    useAnalysisStore();
+  const store = useAnalysisStore();
+  const {
+    aoi,
+    stages,
+    setHealth,
+    setHealthChecking,
+    setEarthEngine,
+    setServerAoi,
+    setAnalysisId,
+    applyStatus,
+    setDatasets,
+    applyBackendLayers,
+    setTargets,
+    setAnalysisError,
+    clearErrors,
+    resetAnalysis,
+    pushLog,
+  } = store;
+
+  /** Mirror every HTTP call into the technical debug panel. */
+  useEffect(() => onApiLog((entry) => pushLog(entry)), [pushLog]);
 
   const checkHealth = useCallback(async () => {
     setHealthChecking(true);
     try {
-      const health = await healthService.check();
-      setHealth(health, null);
+      setHealth(await healthService.check(), null);
     } catch (error) {
-      setHealth(null, error instanceof ApiError ? error.message : BACKEND_UNCONFIGURED);
+      setHealth(null, message(error));
     }
-  }, [setHealth, setHealthChecking]);
+    try {
+      setEarthEngine(await healthService.earthEngine(), null);
+    } catch (error) {
+      setEarthEngine(null, message(error));
+    }
+  }, [setEarthEngine, setHealth, setHealthChecking]);
 
   useEffect(() => {
     void checkHealth();
   }, [checkHealth]);
 
+  useEffect(
+    () => () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    },
+    [],
+  );
+
+  /** Fetch backend-produced artefacts. Nothing is synthesised when absent. */
+  const loadResults = useCallback(
+    async (analysisId: string) => {
+      try {
+        const manifest = await analysisService.datasets(analysisId);
+        setDatasets(
+          (manifest.datasets ?? []).map((d, i) => ({
+            id: d.id ?? `dataset-${i}`,
+            name: d.name,
+            family: d.family ?? "optical",
+            provider: d.provider ?? "—",
+            status: d.status,
+            ...(d.resolution_m !== undefined ? { resolution_m: d.resolution_m } : {}),
+            ...(d.note ? { note: d.note } : {}),
+          })),
+        );
+      } catch (error) {
+        if (!isNotImplemented(error)) setAnalysisError(message(error));
+      }
+
+      try {
+        const layers = await layerService.list(analysisId);
+        applyBackendLayers(layers.layers ?? []);
+      } catch (error) {
+        if (!isNotImplemented(error)) setAnalysisError(message(error));
+      }
+
+      try {
+        const targets = await targetService.list(analysisId);
+        setTargets(targets.targets ?? []);
+      } catch (error) {
+        if (!isNotImplemented(error)) setAnalysisError(message(error));
+      }
+    },
+    [applyBackendLayers, setAnalysisError, setDatasets, setTargets],
+  );
+
+  const poll = useCallback(
+    (analysisId: string) => {
+      if (pollRef.current) clearInterval(pollRef.current);
+      pollRef.current = setInterval(() => {
+        void (async () => {
+          try {
+            const status = await analysisService.status(analysisId);
+            applyStatus(status);
+            if (TERMINAL.has(status.status)) {
+              if (pollRef.current) clearInterval(pollRef.current);
+              pollRef.current = null;
+              if (status.status === "failed") {
+                setAnalysisError(status.error ?? status.message ?? "Backend reported a failed run.");
+              } else {
+                await loadResults(analysisId);
+              }
+            }
+          } catch (error) {
+            if (pollRef.current) clearInterval(pollRef.current);
+            pollRef.current = null;
+            setAnalysisError(message(error));
+          }
+        })();
+      }, POLL_INTERVAL_MS);
+    },
+    [applyStatus, loadResults, setAnalysisError],
+  );
+
   const runAnalysis = useCallback(async () => {
     if (aoi.centerLat === null || aoi.centerLon === null) return;
+    resetAnalysis();
     clearErrors();
     setRunning(true);
     try {
-      const run = await analysisService.start({
-        aoi: {
-          name: aoi.name,
-          shape: aoi.shape,
-          center_lat: aoi.centerLat,
-          center_lon: aoi.centerLon,
-          radius_m: aoi.radiusM,
-          crs: "EPSG:4326",
-          scale_m: aoi.scaleM,
-        },
-        scales_m: [10, 20, 50, 100, 200, 300, 500],
+      // 1. POST /aoi — the backend validates geometry and owns the AOI id.
+      const serverAoi = await aoiService.create({
+        latitude: aoi.centerLat,
+        longitude: aoi.centerLon,
+        radius_m: aoi.radiusM,
+        name: aoi.name,
+        scale_m: aoi.scaleM,
+        shape: aoi.shape,
       });
-      applyRun(run);
+      setServerAoi(serverAoi);
+
+      // 2. POST /analysis/start
+      const started = await analysisService.start({
+        aoi_id: serverAoi.aoi_id,
+        scale_m: aoi.scaleM,
+        datasets: [],
+      });
+      setAnalysisId(started.analysis_id);
+
+      // 3. GET /analysis/{id}/status — real backend state, no local animation.
+      const status = await analysisService.status(started.analysis_id);
+      applyStatus(status);
+      if (TERMINAL.has(status.status)) {
+        if (status.status === "failed") {
+          setAnalysisError(status.error ?? status.message ?? "Backend reported a failed run.");
+        } else {
+          await loadResults(started.analysis_id);
+        }
+      } else {
+        poll(started.analysis_id);
+      }
     } catch (error) {
-      setAnalysisError(error instanceof ApiError ? error.message : BACKEND_UNCONFIGURED);
+      setAnalysisError(message(error));
     } finally {
       setRunning(false);
     }
-  }, [aoi, applyRun, clearErrors, setAnalysisError]);
+  }, [
+    aoi,
+    applyStatus,
+    clearErrors,
+    loadResults,
+    poll,
+    resetAnalysis,
+    setAnalysisError,
+    setAnalysisId,
+    setServerAoi,
+  ]);
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-background">
-      <TopBar onRefreshHealth={() => void checkHealth()} />
+      <TopBar onRefreshHealth={() => void checkHealth()} onOpenSection={setSection} />
       <div className="flex min-h-0 flex-1">
         <Sidebar
           active={section}
