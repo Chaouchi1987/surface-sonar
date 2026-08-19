@@ -231,6 +231,9 @@ function TargetDetail({ target }: { target: Target }) {
 
       <EvidenceBars target={target} />
 
+      <EvidenceList items={target.evidence} />
+
+
       <Block title="Supporting evidence" items={target.supporting_features} />
       <Block title="Data sources" items={target.data_sources} />
       <Block title="Methodology" items={target.methodology} />
