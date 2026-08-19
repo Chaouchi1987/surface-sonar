@@ -130,18 +130,22 @@ export function RightPanel() {
   );
 }
 
-function EmptyTargets() {
+function EmptyTargets({ reported }: { reported: boolean }) {
   return (
     <div className="mt-3 rounded-md border border-dashed border-border p-4 text-center">
       <ScanLine className="mx-auto h-5 w-5 text-muted-foreground" />
-      <p className="mt-2 text-[12.5px] text-secondary-foreground">No analysis available</p>
+      <p className="mt-2 text-[12.5px] text-secondary-foreground">
+        {reported ? "No scientifically supported target zones identified" : "No analysis available"}
+      </p>
       <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-        Define an AOI and run a scientific analysis. Targets appear only when the backend
-        returns evidence-supported zones.
+        {reported
+          ? "The backend completed the run and returned zero evidence-supported zones. An empty result is a valid scientific outcome."
+          : "Define an AOI and run a scientific analysis. Targets appear only when the backend returns evidence-supported zones."}
       </p>
     </div>
   );
 }
+
 
 function TargetDetail({ target }: { target: Target }) {
   const [[minLat, minLon], [maxLat, maxLon]] = boxAround(
