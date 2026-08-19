@@ -15,8 +15,17 @@ import { cn } from "@/lib/utils";
 import { EvidenceBars } from "./EvidenceBars";
 
 export function RightPanel() {
-  const { targets, selectedTargetId, selectTarget, analysisStatus, layers, datasets, lastRun } =
-    useAnalysisStore();
+  const {
+    targets,
+    selectedTargetId,
+    selectTarget,
+    analysisStatus,
+    layers,
+    datasets,
+    processingTimeS,
+    completedAt,
+    targetsReported,
+  } = useAnalysisStore();
   const selected = targets.find((t) => t.target_id === selectedTargetId) ?? targets[0] ?? null;
   const activeLayers = layers.filter((l) => l.visible);
 
@@ -28,11 +37,16 @@ export function RightPanel() {
       <section>
         <h2 className="label-tech">Analysis status</h2>
         <p className="mt-1 text-[13px] capitalize text-secondary-foreground">
-          {analysisStatus.replace("_", " ")}
+          {analysisStatus.replace(/_/g, " ")}
         </p>
-        {lastRun?.processing_time_s !== undefined && (
+        {processingTimeS !== null && (
           <p className="mono-coord mt-0.5 text-[11px] text-muted-foreground">
-            {lastRun.processing_time_s.toFixed(1)} s processing time
+            {processingTimeS.toFixed(1)} s processing time
+          </p>
+        )}
+        {completedAt && (
+          <p className="mono-coord mt-0.5 text-[11px] text-muted-foreground">
+            Completed {new Date(completedAt).toLocaleString()}
           </p>
         )}
       </section>
