@@ -1,344 +1,385 @@
 /**
- * API contract types for the external GeoAnomaly Pro Python/FastAPI
- * scientific backend. These describe the wire format only — the frontend
- * never synthesises values for any of these structures.
+ * VERIFIED API contract for the GeoAnomaly Pro Python/FastAPI scientific
+ * backend.
+ *
+ * Every type in this file was derived by reading the actual backend source
+ * (backend/main.py, backend/api/*.py, backend/models/schemas.py,
+ * backend/models/targeting.py, backend/reporting/report.py) rather than from
+ * assumption. Nothing here is speculative, and the frontend never synthesises
+ * a value for any of these structures.
+ *
+ * Backend routers (backend/main.py):
+ *   GET  /health
+ *   GET  /health/earth-engine
+ *   POST /auth/signup            POST /auth/login          GET /auth/me
+ *   GET  /auth/earth-engine/status
+ *   POST /auth/earth-engine/local-connect
+ *   GET  /auth/earth-engine/start
+ *   POST /aoi
+ *   POST /analysis/start
+ *   GET  /analysis/{id}/status   /datasets  /layers  /targets  /samples  /debug
+ *   GET  /reports/{id}           GET /reports/{id}/pdf
+ *
+ * All routes except /health, /auth/signup and /auth/login require a
+ * `Authorization: Bearer <jwt>` header issued by the backend itself
+ * (backend/core/auth.py::create_token).
  */
 
-export type AoiShape = "circle" | "rectangle" | "polygon";
+/* ------------------------------------------------------------------ health */
 
-export interface AoiGeometry {
-  type: "Polygon" | "Point";
-  coordinates: number[] | number[][][];
-}
-
-export interface Aoi {
-  aoi_id?: string;
-  name: string;
-  shape: AoiShape;
-  /** Decimal degrees, full precision preserved (no 4-decimal rounding). */
-  center_lat: number;
-  center_lon: number;
-  /** Metres. Present for circle AOIs. */
-  radius_m?: number;
-  /** Metres. Present for rectangle AOIs. */
-  width_m?: number;
-  height_m?: number;
-  geometry?: AoiGeometry;
-  crs: string;
-  /** Target investigation scale in metres. */
-  scale_m: number;
-}
-
-export type DatasetStatus =
-  | "available"
-  | "unavailable"
-  | "processing"
-  | "no_coverage"
-  | "auth_required"
-  | "unknown";
-
-export interface DatasetInfo {
-  id: string;
-  name: string;
-  family: "optical" | "sar" | "dem" | "thermal" | "hyperspectral";
-  provider: string;
-  status: DatasetStatus;
-  resolution_m?: number;
-  note?: string;
+/** GET /health — backend/api/health.py */
+export interface BackendHealth {
+  status: "ok" | "degraded" | "error";
+  service?: string;
+  version?: string;
 }
 
 /**
- * Full pipeline as orchestrated by the backend:
- * acquisition → preprocessing → features → geology → temporal → thermal →
- * structural → evidence → intelligence → ranking → final targets.
+ * GET /health/earth-engine and GET /auth/earth-engine/status —
+ * backend/gee/auth.py::earth_engine_status. Earth Engine is authorised
+ * per user, so "login_required" is a real, expected state.
  */
-export type PipelineStageId =
-  | "data_acquisition"
-  | "preprocessing"
-  | "feature_extraction"
-  | "geology"
-  | "temporal"
-  | "thermal"
-  | "structural"
-  | "evidence"
-  | "intelligence"
-  | "target_ranking"
-  | "final_targets"
-  // legacy ids still accepted from older backend builds
-  | "anomaly_detection"
-  | "spatial_clustering";
-
-export type StageStatus = "pending" | "running" | "complete" | "failed" | "skipped";
-
-export interface PipelineStage {
-  id: PipelineStageId;
-  label: string;
-  status: StageStatus;
-  message?: string;
-  /** 0–1, reported by the backend only. Never interpolated client-side. */
-  progress?: number;
-  started_at?: string;
-  completed_at?: string;
-}
-
-export type AnalysisStatus =
-  | "idle"
-  | "queued"
-  | "running"
-  | "complete"
-  | "failed"
-  | "no_targets";
-
-export interface DataQuality {
-  coverage_pct?: number;
-  cloud_pct?: number;
-  missing_pixels_pct?: number;
-  spatial_resolution_m?: number;
-  temporal_coverage?: string;
-  flags?: string[];
-}
-
-export interface AnalysisRun {
-  analysis_id: string;
-  aoi: Aoi;
-  status: AnalysisStatus;
-  stages: PipelineStage[];
-  datasets: DatasetInfo[];
-  data_quality?: DataQuality;
-  started_at?: string;
-  completed_at?: string;
-  processing_time_s?: number;
-  error?: string;
-}
-
-export type EvidenceChannel =
-  | "anomaly"
-  | "geological"
-  | "thermal"
-  | "temporal"
-  | "structural"
-  | "statistical"
-  | "intelligence";
-
-export type Interpretation =
-  | "natural_geological"
-  | "anthropogenic"
-  | "mixed_uncertain"
-  | "insufficient_evidence";
-
-/** Single evidence record produced by one of the scientific pipelines. */
-export interface EvidenceItem {
-  channel: EvidenceChannel | string;
-  /** Human readable statement produced by the backend. */
-  description: string;
-  /** 0–1 as scored by the backend. Optional — absence means "not scored". */
-  score?: number;
-  /** Which dataset / feature backs this statement. */
-  source?: string;
-  /** Backend-declared strength; never derived in the browser. */
-  strength?: "weak" | "moderate" | "strong";
-}
-
-/** Normalised score bundle. Missing keys mean the pipeline did not run. */
-export interface TargetScores {
-  anomaly?: number;
-  statistical?: number;
-  geological?: number;
-  thermal?: number;
-  temporal?: number;
-  structural?: number;
-  intelligence?: number;
-}
-
-export interface Target {
-  target_id: string;
-  rank: number;
-  latitude: number;
-  longitude: number;
-  bounding_box: [number, number, number, number];
-  size_m?: number;
-  anomaly_score?: number;
-  statistical_score?: number;
-  geological_score?: number;
-  thermal_score?: number;
-  temporal_score?: number;
-  structural_score?: number;
-  /** Composite score produced by the AI / intelligence pipeline. */
-  intelligence_score?: number;
-  /** Optional structured bundle; falls back to the flat *_score fields. */
-  scores?: TargetScores;
-  model_agreement?: number;
-  /** 0–1 confidence reported by the backend, if it computes one. */
-  confidence?: number;
-  /** Backend classification label, e.g. "structural_lineament". */
-  category?: string;
-  /** Explicit distinction between a measured anomaly and an interpretation. */
-  evidence_class?: "anomaly" | "hypothesis";
-  evidence?: EvidenceItem[];
-  data_quality?: DataQuality;
-  interpretation: Interpretation;
-  supporting_features: string[];
-  data_sources: string[];
-  analysis_timestamp: string;
-  methodology: string[];
-  limitations: string[];
-}
-
-export interface LayerDescriptor {
-  id: string;
-  name: string;
-  group: "basemap" | "spectral" | "terrain" | "radar" | "thermal" | "analysis" | "vector";
-  /** Tile template served by the backend. Absent = layer has no data yet. */
-  tile_url?: string;
-  legend?: { label: string; ramp: string[] };
-  metadata?: Record<string, string | number>;
-}
-
-export interface HealthResponse {
-  status: "ok" | "degraded" | "error";
-  earth_engine: boolean;
-  earth_engine_project?: string;
-  version?: string;
-}
-
-/** GET /health */
-export interface BackendHealth {
-  status: "ok" | "degraded" | "error";
-  version?: string;
-  /** Some builds report EE inline on /health. Both shapes are tolerated. */
-  earth_engine?: boolean;
-  earth_engine_project?: string;
-}
-
-/** GET /health/earth-engine */
 export interface EarthEngineHealth {
-  status: "ready" | "error" | "unknown";
+  status: "ready" | "error" | "login_required" | "not_connected" | "unknown";
+  connected?: boolean;
+  mode?: "oauth" | "local" | string;
+  project?: string;
+  user_scoped?: boolean;
+  message?: string;
+  /** Only present on /auth/earth-engine/status. */
+  oauth_configured?: boolean;
+  local_dev_available?: boolean;
+}
+
+/* -------------------------------------------------------------------- auth */
+
+/** POST /auth/signup and POST /auth/login — backend/api/auth.py */
+export interface BackendAuthResponse {
+  access_token: string;
+  username: string;
+}
+
+/** GET /auth/me */
+export interface BackendUser {
+  user_id: string;
+  username: string;
+}
+
+/** GET /auth/earth-engine/start */
+export interface EarthEngineAuthStart {
+  authorization_url: string;
+}
+
+/** POST /auth/earth-engine/local-connect */
+export interface EarthEngineLocalConnect {
+  connected: boolean;
+  mode: string;
   project?: string;
   message?: string;
 }
 
-/** POST /aoi */
+/* --------------------------------------------------------------------- AOI */
+
+/** The backend only accepts these two geometries (schemas.AOIRequest). */
+export type AoiGeometryType = "circle" | "square";
+
+/** POST /aoi request — backend/models/schemas.py::AOIRequest */
 export interface AoiRequest {
+  /** Full precision, never rounded client-side. */
+  latitude: number;
+  longitude: number;
+  /** Backend constraint: 0 < radius_m <= 500. */
+  radius_m: number;
+  /** Requested investigation/sample scale in metres. */
+  scale_m: number;
+  geometry_type: AoiGeometryType;
+}
+
+/** POST /aoi response — backend/models/schemas.py::AOIResponse */
+export interface AoiResponse {
+  aoi_id: string;
   latitude: number;
   longitude: number;
   radius_m: number;
-  name?: string;
-  scale_m?: number;
-  shape?: AoiShape;
-  geometry?: AoiGeometry;
-}
-
-export interface AoiResponse {
-  aoi_id: string;
-  center: { lat: number; lon: number };
-  radius_m: number;
+  scale_m: number;
   area_m2: number;
+  /** [min_lon, min_lat, max_lon, max_lat] as produced by make_aoi_bbox. */
+  bbox: number[];
 }
 
-/** POST /analysis/start */
+/* ---------------------------------------------------------------- analysis */
+
+/**
+ * POST /analysis/start request — backend/models/schemas.py.
+ * The route additionally rejects any scale_m outside {10,20,30,40,50}.
+ */
 export interface AnalysisStartRequest {
   aoi_id: string;
   scale_m: number;
-  datasets: string[];
-  /** Optional orchestrator hints — the backend decides what actually runs. */
-  pipelines?: PipelineName[];
-  scales_m?: number[];
+  start_date: string;
+  end_date: string;
+  cloud_pct: number;
 }
 
 export interface AnalysisStartResponse {
   analysis_id: string;
 }
 
-export type PipelineName =
-  | "geology"
-  | "temporal"
-  | "thermal"
-  | "structural"
-  | "intelligence";
+/** Scales the backend actually accepts (backend/api/analysis.py::start). */
+export const SUPPORTED_SCALES_M = [10, 20, 30, 40, 50] as const;
+export type SupportedScaleM = (typeof SUPPORTED_SCALES_M)[number];
 
+/** Run-level status held in backend/core/store.py::RUNS. */
+export type AnalysisRunStatus = "queued" | "running" | "completed" | "failed";
+
+/**
+ * Stage identifiers emitted by backend/api/analysis.py::_run — these are the
+ * literal strings the worker writes, in execution order. The UI never invents
+ * a stage that the backend did not report.
+ */
 export type BackendStage =
   | "queued"
-  | "acquiring_data"
-  | "preprocessing"
-  | "feature_extraction"
-  | "anomaly_detection"
-  | "spatial_clustering"
-  | "geological_analysis"
-  | "temporal_analysis"
-  | "thermal_analysis"
-  | "structural_analysis"
-  | "evidence_fusion"
-  | "intelligence_analysis"
-  | "target_ranking"
+  | "acquisition"
+  | "spectral_dem"
+  | "anomaly_ensemble"
+  | "legacy_scientific_audit"
+  | "geology"
+  | "multiscale"
+  | "temporal"
+  | "thermal"
+  | "artifact_suppression"
+  | "ranking"
   | "completed"
   | "failed";
 
-/** GET /analysis/{id}/status */
+export type StageStatus = "pending" | "running" | "complete" | "failed" | "skipped";
+
+export interface PipelineStage {
+  id: BackendStage;
+  label: string;
+  status: StageStatus;
+  message?: string;
+  /** 0–1 as reported by the backend. Never interpolated client-side. */
+  progress?: number;
+}
+
+/** GET /analysis/{id}/status and /debug — the raw RUNS record. */
 export interface AnalysisStatusResponse {
   analysis_id: string;
-  status: BackendStage;
-  message?: string;
-  stages?: PipelineStage[];
-  started_at?: string;
-  completed_at?: string;
-  processing_time_s?: number;
-  error?: string;
+  user_id?: string;
+  status: AnalysisRunStatus;
+  stage: BackendStage;
+  progress?: number | null;
+  message?: string | null;
+  error?: string | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+  /** Present only on failure / debug. */
+  traceback?: string;
 }
 
-/** GET /analysis/{id} — full orchestrator result, when the backend exposes it. */
-export interface AnalysisResult {
-  analysis_id: string;
-  status: BackendStage;
-  aoi?: AoiResponse;
-  stages?: PipelineStage[];
-  datasets?: DatasetInfo[];
-  layers?: LayerDescriptor[];
-  targets?: Target[];
-  data_quality?: DataQuality;
-  methodology?: string[];
-  limitations?: string[];
-  started_at?: string;
-  completed_at?: string;
-  processing_time_s?: number;
+/* ---------------------------------------------------------------- datasets */
+
+/**
+ * GET /analysis/{id}/datasets. The backend reports free-form status strings
+ * such as "available", "available_per_cell", "not_run",
+ * "isolated_pending_validation" or "unavailable: <reason>".
+ */
+export interface DatasetInfo {
+  name: string;
+  status: string;
+  resolution_m?: number;
+  scenes?: number;
+  note?: string;
+  modules?: string[];
 }
 
-/** Result envelope shared by the geology / temporal / intelligence pipelines. */
-export interface PipelineResult {
-  analysis_id: string;
-  pipeline: PipelineName;
-  status: "complete" | "failed" | "skipped" | "running";
-  message?: string;
-  layers?: LayerDescriptor[];
-  evidence?: EvidenceItem[];
-  metrics?: Record<string, number | string>;
-  limitations?: string[];
-}
-
-/** GET /analysis/{id}/datasets */
 export interface DatasetManifestResponse {
-  datasets: (Omit<DatasetInfo, "id" | "family" | "provider"> &
-    Partial<Pick<DatasetInfo, "id" | "family" | "provider">>)[];
+  datasets: DatasetInfo[];
 }
 
-/** GET /analysis/{id}/layers */
+/* ------------------------------------------------------------------ layers */
+
+/**
+ * GET /analysis/{id}/layers. The backend returns vector/point result layers
+ * with counts — it does not serve raster tile templates.
+ */
+export interface LayerDescriptor {
+  id: string;
+  name: string;
+  type: "points" | "geojson" | string;
+  count: number;
+}
+
 export interface LayersResponse {
   layers: LayerDescriptor[];
 }
 
-/** GET /analysis/{id}/targets */
+/* ----------------------------------------------------------------- targets */
+
+/** backend/science/utm.py::wgs84_to_utm */
+export interface UtmCoordinate {
+  zone?: number;
+  hemisphere?: string;
+  easting?: number;
+  northing?: number;
+  epsg?: string | number;
+  [key: string]: string | number | undefined;
+}
+
+export interface TypeInterpretation {
+  class: string;
+  label: string;
+  /** Hypothesis-fit percentage — explicitly NOT a probability. */
+  fit_percent: number;
+  alternatives: { label: string; fit_percent: number }[];
+  scientific_note: string;
+}
+
+export interface ScoreTraceComponent {
+  value: number;
+  weight: number;
+  weighted: number;
+}
+
+/** Immutable audit trace attached to every target by the backend. */
+export interface ScoreTrace {
+  cell_id: string;
+  components: Record<string, ScoreTraceComponent>;
+  available_weight: number;
+  pre_suppression_score: number | null;
+  artifact_penalty_factor: number | null;
+  final_evidence_score: number | null;
+  trace_id: string;
+}
+
+export interface GeoJsonFeature {
+  type: "Feature";
+  properties: Record<string, unknown>;
+  geometry: { type: string; coordinates: unknown };
+}
+
+/**
+ * GET /analysis/{id}/targets — backend/models/targeting.py::build_targets.
+ * Scores are relative evidence rankings inside the analysed AOI, not
+ * probabilities, and never a claim about a buried object or its depth.
+ */
+export interface Target {
+  target_id: string;
+  rank: number;
+  cell_id: string;
+  latitude: number;
+  longitude: number;
+  utm?: UtmCoordinate;
+  box_geojson?: GeoJsonFeature;
+  box_size_m: number;
+
+  /** Fused final evidence score (0–1). */
+  anomaly_score: number;
+  strength_percent: number;
+
+  zscore_score?: number;
+  isolation_forest_score?: number;
+  geological_score?: number;
+  consensus_score?: number;
+  temporal_score?: number;
+  temporal_disturbance_score?: number;
+  temporal_stability_score?: number;
+  thermal_score?: number;
+
+  ndvi?: number;
+  ndmi?: number;
+  ndwi?: number;
+  ndbi?: number;
+  iron_oxide?: number;
+  clay_ratio?: number;
+
+  human_surface_change_signal?: number;
+  surface_artifact_risk?: number;
+  built_surface_risk?: number;
+  water_surface_risk?: number;
+  vegetation_mask_risk?: number;
+  landcover_boundary_risk?: number;
+
+  estimated_surface_length_m?: number;
+  estimated_surface_width_m?: number;
+  /** Always null: satellite data alone cannot support a depth estimate. */
+  depth_estimate_m: number | null;
+
+  type_interpretation?: TypeInterpretation;
+  evidence: string[];
+  data_quality?: { source?: string; synthetic?: boolean; [key: string]: unknown };
+  score_trace?: ScoreTrace;
+  trace_id?: string;
+}
+
 export interface TargetsResponse {
   targets: Target[];
 }
 
-/** POST /analysis/test/sentinel2 */
-export interface Sentinel2TestResponse {
-  dataset: string;
-  feature: string;
-  statistics: { mean: number; min: number; max: number };
-  image_count?: number;
-  date_range?: string;
-  cloud_filter_pct?: number;
+/* ----------------------------------------------------------------- samples */
+
+/** GET /analysis/{id}/samples — every sampled grid cell plus run metadata. */
+export interface SamplesResponse {
+  samples: Record<string, unknown>[];
+  metadata: AnalysisMetadata;
+  quality: FeatureQuality;
 }
+
+/** backend/api/analysis.py RESULTS[...]["metadata"] */
+export interface AnalysisMetadata {
+  synthetic?: boolean;
+  analysis_scale_m?: number;
+  start_date?: string;
+  end_date?: string;
+  cloud_pct?: number;
+  sample_count?: number;
+  target_candidate_count?: number;
+  context_radius_m?: number;
+  observation_count?: number;
+  duration_seconds?: number;
+  optional_modules?: Record<string, string>;
+  score_semantics?: string;
+  score_calibration?: string;
+  scientific_interpretation_policy?: string;
+  method?: string;
+  centre_utm?: UtmCoordinate;
+  aoi_center?: { latitude: number; longitude: number };
+  aoi_radius_m?: number;
+  target_box_m?: number;
+  thermal_effective_resolution_m?: number;
+  spectral_proxy_effective_resolution_m?: number;
+  landcover_source?: string;
+  [key: string]: unknown;
+}
+
+/** backend/science/features.py::feature_quality */
+export interface FeatureQuality {
+  sample_count?: number;
+  feature_count?: number;
+  overall_completeness?: number;
+  by_feature?: Record<string, number>;
+  finite_rows?: number;
+}
+
+/* ----------------------------------------------------------------- reports */
+
+/** GET /reports/{id} — backend/reporting/report.py::build_report */
+export interface ScientificReport {
+  title: string;
+  generated_at: string;
+  scientific_boundary: string;
+  methodology: string[];
+  metadata: AnalysisMetadata;
+  datasets: DatasetInfo[];
+  targets: Target[];
+  score_trace_policy?: string;
+  quality?: FeatureQuality;
+  limitations: string[];
+  [key: string]: unknown;
+}
+
+/* ------------------------------------------------------------ UI envelopes */
 
 /** Generic four-state resource envelope used across the UI. */
 export type RemoteState<T> =
