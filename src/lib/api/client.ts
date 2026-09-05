@@ -43,9 +43,51 @@ export const ENV_API_BASE_URL = ENV_BASE_URL;
 /** @deprecated prefer getApiBaseUrl() so runtime overrides are respected. */
 export const API_BASE_URL: string = ENV_BASE_URL;
 
+/* --------------------------------------------------------- backend session */
+
+const TOKEN_KEY = "geoanomaly.backend_token";
+
+/**
+ * The FastAPI service issues its own JWT (backend/core/auth.py). Every route
+ * except /health and the auth endpoints requires it as a bearer token.
+ */
+function readToken(): string {
+  if (typeof window === "undefined") return "";
+  try {
+    return window.localStorage.getItem(TOKEN_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+let backendToken = readToken();
+
+export function getBackendToken(): string {
+  return backendToken;
+}
+
+export function setBackendToken(token: string | null): void {
+  backendToken = token ?? "";
+  try {
+    if (backendToken) window.localStorage.setItem(TOKEN_KEY, backendToken);
+    else window.localStorage.removeItem(TOKEN_KEY);
+  } catch {
+    /* storage unavailable — keep the in-memory value only */
+  }
+}
+
+export const BACKEND_AUTH_REQUIRED =
+  "Backend authentication required. Sign in to the analysis service in Settings → Backend.";
+
+/** True when the backend rejected the request for missing/expired credentials. */
+export function isUnauthorized(error: unknown): boolean {
+  return error instanceof ApiError && (error.status === 401 || error.status === 403);
+}
+
 /** Demo mode is opt-in and never enabled in production builds by default. */
 export const DEMO_MODE: boolean =
   (import.meta.env["VITE_ENABLE_DEMO_MODE"] as string | undefined) === "true";
+
 
 export class ApiError extends Error {
   constructor(
