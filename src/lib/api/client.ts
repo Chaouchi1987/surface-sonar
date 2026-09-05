@@ -173,8 +173,10 @@ export async function apiFetch<T>(
       signal: controller.signal,
       headers: {
         "content-type": "application/json",
+        ...(backendToken ? { authorization: `Bearer ${backendToken}` } : {}),
         ...(rest.headers ?? {}),
       },
+
     });
 
     const text = await response.text();
