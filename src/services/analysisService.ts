@@ -4,9 +4,13 @@ import type {
   AnalysisStartResponse,
   AnalysisStatusResponse,
   DatasetManifestResponse,
-  Sentinel2TestResponse,
+  SamplesResponse,
 } from "@/lib/api/types";
 
+/**
+ * All analysis routes require the backend-issued bearer token; the shared
+ * client attaches it. No value returned here is ever synthesised.
+ */
 export const analysisService = {
   /** POST /analysis/start */
   start: (payload: AnalysisStartRequest) =>
@@ -24,14 +28,11 @@ export const analysisService = {
   datasets: (analysisId: string) =>
     apiFetch<DatasetManifestResponse>(`/analysis/${analysisId}/datasets`),
 
-  /**
-   * POST /analysis/test/sentinel2 — first scientific integration milestone.
-   * Every returned statistic originates from Earth Engine.
-   */
-  sentinel2Test: (payload: { aoi_id: string }) =>
-    apiFetch<Sentinel2TestResponse>("/analysis/test/sentinel2", {
-      method: "POST",
-      body: JSON.stringify(payload),
-      timeoutMs: 60000,
-    }),
+  /** GET /analysis/{id}/samples — sampled grid cells plus run metadata. */
+  samples: (analysisId: string) =>
+    apiFetch<SamplesResponse>(`/analysis/${analysisId}/samples`, { timeoutMs: 30000 }),
+
+  /** GET /analysis/{id}/debug — raw run record including any traceback. */
+  debug: (analysisId: string) =>
+    apiFetch<AnalysisStatusResponse>(`/analysis/${analysisId}/debug`),
 };

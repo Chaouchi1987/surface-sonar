@@ -1,11 +1,18 @@
 import type { Target } from "@/lib/api/types";
 
+/**
+ * Evidence channels exactly as the backend reports them
+ * (backend/models/targeting.py). A channel with no value is shown as
+ * "Not reported" — never as zero and never inferred.
+ */
 const CHANNELS: { key: keyof Target; label: string; color: string }[] = [
-  { key: "anomaly_score", label: "Anomaly", color: "var(--color-anomaly)" },
+  { key: "anomaly_score", label: "Fused", color: "var(--color-anomaly)" },
+  { key: "zscore_score", label: "Z-Score", color: "var(--color-anomaly)" },
+  { key: "isolation_forest_score", label: "Isolation F.", color: "var(--color-anomaly)" },
   { key: "geological_score", label: "Geology", color: "var(--color-geological)" },
   { key: "temporal_score", label: "Temporal", color: "var(--color-temporal)" },
   { key: "thermal_score", label: "Thermal", color: "var(--color-thermal)" },
-  { key: "structural_score", label: "Structural", color: "var(--color-structural)" },
+  { key: "consensus_score", label: "Consensus", color: "var(--color-structural)" },
 ];
 
 const SEGMENTS = 10;
@@ -35,25 +42,20 @@ export function EvidenceBars({ target }: { target: Target }) {
                   <span
                     key={i}
                     className="h-1.5 flex-1 rounded-[1px]"
-                    style={{
-                      backgroundColor: i < filled ? color : "var(--color-elevated)",
-                    }}
+                    style={{ backgroundColor: i < filled ? color : "var(--color-elevated)" }}
                   />
                 ))}
               </span>
-              <span className="mono-coord w-20 shrink-0 text-right text-[10.5px] text-secondary-foreground">
-                {value === null ? "No data" : qualitative(value)}
+              <span className="mono-coord w-24 shrink-0 text-right text-[10.5px] text-secondary-foreground">
+                {value === null ? "Not reported" : qualitative(value)}
               </span>
             </li>
           );
         })}
       </ul>
-      {target.model_agreement !== undefined && (
-        <p className="mono-coord mt-1.5 text-[10.5px] text-muted-foreground">
-          Model agreement {(target.model_agreement * 100).toFixed(0)}% · score, confidence and
-          data quality are reported separately.
-        </p>
-      )}
+      <p className="mt-1.5 text-[10.5px] leading-relaxed text-muted-foreground">
+        Scores are relative evidence rankings within this AOI, not probabilities.
+      </p>
     </div>
   );
 }

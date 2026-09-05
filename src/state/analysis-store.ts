@@ -1,142 +1,127 @@
 import { create } from "zustand";
 import type { ApiLogEntry } from "@/lib/api/client";
 import type {
-  AoiResponse,
+  AnalysisMetadata,
   AnalysisStatusResponse,
+  AoiGeometryType,
+  AoiResponse,
   BackendHealth,
   BackendStage,
   DatasetInfo,
   EarthEngineHealth,
+  FeatureQuality,
   LayerDescriptor,
-  PipelineName,
-  PipelineResult,
   PipelineStage,
-  PipelineStageId,
-  Sentinel2TestResponse,
+  StageStatus,
   Target,
 } from "@/lib/api/types";
 
 export interface AoiDraft {
   name: string;
-  shape: "circle" | "rectangle" | "polygon";
+  geometryType: AoiGeometryType;
   centerLat: number | null;
   centerLon: number | null;
+  /** Backend constraint: 0 < radius_m <= 500. */
   radiusM: number;
+  /** Backend constraint: one of 10/20/30/40/50. */
   scaleM: number;
-  /** Raw GeoJSON geometry when the AOI came from an uploaded file. */
-  geometry?: unknown;
+  startDate: string;
+  endDate: string;
+  cloudPct: number;
 }
 
 export interface MapLayerState {
   id: string;
   name: string;
-  group: LayerDescriptor["group"];
+  group: "basemap" | "result";
   visible: boolean;
   opacity: number;
-  /** Data-backed layers only become renderable once the backend supplies them. */
+  /** Result layers only exist once the backend reports them. */
   available: boolean;
-  tileUrl?: string | undefined;
+  count?: number;
 }
 
-/** Canonical orchestrator pipeline. Only stages the backend reports are shown. */
-export const DEFAULT_STAGES: PipelineStage[] = [
-  { id: "data_acquisition", label: "Data Acquisition", status: "pending" },
-  { id: "preprocessing", label: "Preprocessing", status: "pending" },
-  { id: "feature_extraction", label: "Feature Extraction", status: "pending" },
-  { id: "geology", label: "Geology", status: "pending" },
-  { id: "temporal", label: "Temporal", status: "pending" },
-  { id: "thermal", label: "Thermal", status: "pending" },
-  { id: "structural", label: "Structural", status: "pending" },
-  { id: "evidence", label: "Evidence", status: "pending" },
-  { id: "intelligence", label: "Intelligence", status: "pending" },
-  { id: "target_ranking", label: "Target Ranking", status: "pending" },
-  { id: "final_targets", label: "Final Targets", status: "pending" },
+/**
+ * The pipeline the backend worker actually executes
+ * (backend/api/analysis.py::_run), in the order it writes the stage field.
+ * Nothing here is invented and no stage is animated client-side.
+ */
+export const PIPELINE_STAGES: { id: BackendStage; label: string }[] = [
+  { id: "acquisition", label: "Data Acquisition" },
+  { id: "spectral_dem", label: "Spectral + DEM" },
+  { id: "anomaly_ensemble", label: "Anomaly Ensemble" },
+  { id: "legacy_scientific_audit", label: "Scientific Audit" },
+  { id: "geology", label: "Geology" },
+  { id: "multiscale", label: "Multi-scale" },
+  { id: "temporal", label: "Temporal" },
+  { id: "thermal", label: "Thermal" },
+  { id: "artifact_suppression", label: "Artifact Suppression" },
+  { id: "ranking", label: "Target Ranking" },
 ];
 
-/** Backend stage → pipeline stage id. Nothing is animated locally. */
-const STAGE_OF: Partial<Record<BackendStage, PipelineStageId>> = {
-  acquiring_data: "data_acquisition",
-  preprocessing: "preprocessing",
-  feature_extraction: "feature_extraction",
-  anomaly_detection: "feature_extraction",
-  geological_analysis: "geology",
-  temporal_analysis: "temporal",
-  thermal_analysis: "thermal",
-  structural_analysis: "structural",
-  spatial_clustering: "evidence",
-  evidence_fusion: "evidence",
-  intelligence_analysis: "intelligence",
-  target_ranking: "target_ranking",
-};
+export const DEFAULT_STAGES: PipelineStage[] = PIPELINE_STAGES.map((s) => ({
+  ...s,
+  status: "pending" as StageStatus,
+}));
 
-/** Derives the pipeline bar strictly from the state the backend reported. */
+/** Derives the pipeline bar strictly from the stage the backend reported. */
 export function stagesFromBackend(status: AnalysisStatusResponse): PipelineStage[] {
-  if (status.stages?.length) return status.stages;
-
   if (status.status === "queued") return DEFAULT_STAGES;
   if (status.status === "completed")
-    return DEFAULT_STAGES.map((s) => ({ ...s, status: "complete" as const }));
+    return DEFAULT_STAGES.map((s) => ({ ...s, status: "complete" as StageStatus }));
 
-  const currentId = STAGE_OF[status.status];
-  const currentIndex = DEFAULT_STAGES.findIndex((s) => s.id === currentId);
+  const index = PIPELINE_STAGES.findIndex((s) => s.id === status.stage);
 
   if (status.status === "failed") {
+    const failedAt = Math.max(index, 0);
     return DEFAULT_STAGES.map((s, i) => ({
       ...s,
-      status: i === Math.max(currentIndex, 0) ? ("failed" as const) : ("pending" as const),
-      ...(i === Math.max(currentIndex, 0) && status.message ? { message: status.message } : {}),
+      status: (i < failedAt ? "complete" : i === failedAt ? "failed" : "pending") as StageStatus,
+      ...(i === failedAt && (status.error ?? status.message)
+        ? { message: status.error ?? status.message ?? "" }
+        : {}),
     }));
   }
 
   return DEFAULT_STAGES.map((s, i) => ({
     ...s,
-    status:
-      currentIndex < 0
-        ? ("pending" as const)
-        : i < currentIndex
-          ? ("complete" as const)
-          : i === currentIndex
-            ? ("running" as const)
-            : ("pending" as const),
+    status: (index < 0
+      ? "pending"
+      : i < index
+        ? "complete"
+        : i === index
+          ? "running"
+          : "pending") as StageStatus,
+    ...(i === index && status.message ? { message: status.message } : {}),
   }));
 }
 
-/** Catalog is a menu of possible layers — availability comes from the backend only. */
-export const CATALOG_LAYERS: Omit<MapLayerState, "visible" | "opacity">[] = [
-  { id: "satellite", name: "Satellite", group: "basemap", available: true },
-  { id: "terrain", name: "Terrain", group: "basemap", available: true },
-  { id: "sentinel2", name: "Sentinel-2", group: "spectral", available: false },
-  { id: "sentinel1", name: "Sentinel-1 (SAR)", group: "radar", available: false },
-  { id: "dem", name: "DEM", group: "terrain", available: false },
-  { id: "ndvi", name: "NDVI", group: "spectral", available: false },
-  { id: "ndmi", name: "NDMI", group: "spectral", available: false },
-  { id: "ndbi", name: "NDBI", group: "spectral", available: false },
-  { id: "iron_oxide", name: "Iron Oxide", group: "spectral", available: false },
-  { id: "clay", name: "Clay Minerals", group: "spectral", available: false },
-  { id: "hydrothermal", name: "Hydrothermal Alteration", group: "spectral", available: false },
-  { id: "thermal", name: "Thermal", group: "thermal", available: false },
-  { id: "lineaments", name: "Lineaments", group: "analysis", available: false },
-  { id: "anomaly", name: "Anomaly", group: "analysis", available: false },
-  { id: "targets", name: "Targets", group: "vector", available: false },
-  { id: "target_boxes", name: "Target Boxes (10 m)", group: "vector", available: false },
+const BASEMAP_LAYERS: MapLayerState[] = [
+  {
+    id: "satellite",
+    name: "Satellite imagery",
+    group: "basemap",
+    visible: true,
+    opacity: 1,
+    available: true,
+  },
+  {
+    id: "terrain",
+    name: "Dark terrain",
+    group: "basemap",
+    visible: false,
+    opacity: 1,
+    available: true,
+  },
 ];
 
-const initialLayers: MapLayerState[] = CATALOG_LAYERS.map((l) => ({
-  ...l,
-  // Only the basemap is genuinely available before any backend result exists.
-  visible: l.id === "satellite",
-  opacity: 1,
-}));
+const initialLayers = (): MapLayerState[] => BASEMAP_LAYERS.map((l) => ({ ...l }));
 
-/** Sort helper: intelligence score first, then backend rank. */
+/** Backend rank is authoritative; ties fall back to the fused evidence score. */
 export function sortTargets(targets: Target[]): Target[] {
   return [...targets].sort((a, b) => {
-    const ai = a.intelligence_score ?? a.scores?.intelligence;
-    const bi = b.intelligence_score ?? b.scores?.intelligence;
-    if (typeof ai === "number" && typeof bi === "number" && ai !== bi) return bi - ai;
-    if (typeof ai === "number" && typeof bi !== "number") return -1;
-    if (typeof bi === "number" && typeof ai !== "number") return 1;
-    return a.rank - b.rank;
+    if (a.rank !== b.rank) return a.rank - b.rank;
+    return (b.anomaly_score ?? 0) - (a.anomaly_score ?? 0);
   });
 }
 
@@ -149,29 +134,35 @@ interface AnalysisState {
   earthEngine: EarthEngineHealth | null;
   earthEngineError: string | null;
 
+  backendUsername: string | null;
+
   aoi: AoiDraft;
   serverAoi: AoiResponse | null;
 
   analysisId: string | null;
-  analysisStatus: BackendStage | "idle";
+  analysisStatus: "idle" | AnalysisStatusResponse["status"];
+  analysisStage: BackendStage | "idle";
   analysisMessage: string | null;
-  processingTimeS: number | null;
+  progress: number | null;
   startedAt: string | null;
   completedAt: string | null;
   stages: PipelineStage[];
+
   datasets: DatasetInfo[];
   layers: MapLayerState[];
   targets: Target[];
   targetsReported: boolean;
   selectedTargetId: string | null;
-  pipelineResults: Partial<Record<PipelineName, PipelineResult>>;
-  ndviTest: Sentinel2TestResponse | null;
+  metadata: AnalysisMetadata | null;
+  quality: FeatureQuality | null;
+
   errors: string[];
   apiLog: ApiLogEntry[];
 
   setHealth: (h: BackendHealth | null, error: string | null) => void;
   setHealthChecking: (v: boolean) => void;
   setEarthEngine: (h: EarthEngineHealth | null, error: string | null) => void;
+  setBackendUsername: (name: string | null) => void;
   patchAoi: (patch: Partial<AoiDraft>) => void;
   setServerAoi: (aoi: AoiResponse | null) => void;
   setAnalysisError: (message: string) => void;
@@ -181,14 +172,22 @@ interface AnalysisState {
   setDatasets: (datasets: DatasetInfo[]) => void;
   applyBackendLayers: (layers: LayerDescriptor[]) => void;
   setTargets: (targets: Target[]) => void;
-  setPipelineResult: (result: PipelineResult) => void;
-  setNdviTest: (result: Sentinel2TestResponse | null) => void;
+  setSamples: (metadata: AnalysisMetadata, quality: FeatureQuality) => void;
   selectTarget: (id: string | null) => void;
   toggleLayer: (id: string) => void;
   setLayerOpacity: (id: string, opacity: number) => void;
   pushLog: (entry: ApiLogEntry) => void;
   clearLog: () => void;
   resetAnalysis: () => void;
+}
+
+function defaultWindow(): { startDate: string; endDate: string } {
+  const end = new Date();
+  const start = new Date(end.getTime() - 365 * 24 * 60 * 60 * 1000);
+  return {
+    startDate: start.toISOString().slice(0, 10),
+    endDate: end.toISOString().slice(0, 10),
+  };
 }
 
 export const useAnalysisStore = create<AnalysisState>((set) => ({
@@ -200,30 +199,37 @@ export const useAnalysisStore = create<AnalysisState>((set) => ({
   earthEngine: null,
   earthEngineError: null,
 
+  backendUsername: null,
+
   aoi: {
     name: "Untitled AOI",
-    shape: "circle",
+    geometryType: "circle",
     centerLat: null,
     centerLon: null,
     radiusM: 250,
     scaleM: 10,
+    cloudPct: 20,
+    ...defaultWindow(),
   },
   serverAoi: null,
 
   analysisId: null,
   analysisStatus: "idle",
+  analysisStage: "idle",
   analysisMessage: null,
-  processingTimeS: null,
+  progress: null,
   startedAt: null,
   completedAt: null,
   stages: DEFAULT_STAGES,
+
   datasets: [],
-  layers: initialLayers,
+  layers: initialLayers(),
   targets: [],
   targetsReported: false,
   selectedTargetId: null,
-  pipelineResults: {},
-  ndviTest: null,
+  metadata: null,
+  quality: null,
+
   errors: [],
   apiLog: [],
 
@@ -236,68 +242,66 @@ export const useAnalysisStore = create<AnalysisState>((set) => ({
     }),
   setHealthChecking: (healthChecking) => set({ healthChecking }),
   setEarthEngine: (earthEngine, earthEngineError) => set({ earthEngine, earthEngineError }),
+  setBackendUsername: (backendUsername) => set({ backendUsername }),
   patchAoi: (patch) => set((s) => ({ aoi: { ...s.aoi, ...patch }, serverAoi: null })),
   setServerAoi: (serverAoi) => set({ serverAoi }),
   setAnalysisError: (message) =>
     set((s) => ({ errors: [message, ...s.errors].slice(0, 5), analysisStatus: "failed" })),
   clearErrors: () => set({ errors: [] }),
-  setAnalysisId: (analysisId) => set({ analysisId, analysisStatus: "queued" }),
+  setAnalysisId: (analysisId) =>
+    set({ analysisId, analysisStatus: "queued", analysisStage: "queued" }),
   applyStatus: (status) =>
     set({
       analysisId: status.analysis_id,
       analysisStatus: status.status,
+      analysisStage: status.stage,
       analysisMessage: status.message ?? status.error ?? null,
-      processingTimeS: status.processing_time_s ?? null,
+      progress: status.progress ?? null,
       startedAt: status.started_at ?? null,
       completedAt: status.completed_at ?? null,
       stages: stagesFromBackend(status),
     }),
   setDatasets: (datasets) => set({ datasets }),
   applyBackendLayers: (backendLayers) =>
-    set((s) => ({
-      layers: s.layers.map((l) => {
-        const match = backendLayers.find((b) => b.id === l.id);
-        if (!match) return l.group === "basemap" ? l : { ...l, available: false, visible: false };
-        return {
-          ...l,
-          available: true,
-          name: match.name || l.name,
-          ...(match.tile_url ? { tileUrl: match.tile_url } : {}),
-        };
-      }),
-    })),
-  setTargets: (targets) =>
     set((s) => {
+      const basemaps = s.layers.filter((l) => l.group === "basemap");
+      const results: MapLayerState[] = backendLayers.map((b) => {
+        const existing = s.layers.find((l) => l.id === b.id);
+        return {
+          id: b.id,
+          name: b.name || b.id,
+          group: "result",
+          visible: existing?.visible ?? b.count > 0,
+          opacity: existing?.opacity ?? 1,
+          available: b.count > 0,
+          count: b.count,
+        };
+      });
+      return { layers: [...basemaps, ...results] };
+    }),
+  setTargets: (targets) =>
+    set(() => {
       const sorted = sortTargets(targets);
       return {
         targets: sorted,
         targetsReported: true,
         selectedTargetId: sorted[0]?.target_id ?? null,
-        layers: s.layers.map((l) =>
-          l.group === "vector"
-            ? { ...l, available: sorted.length > 0, visible: sorted.length > 0 }
-            : l,
-        ),
       };
     }),
-  setPipelineResult: (result) =>
-    set((s) => ({ pipelineResults: { ...s.pipelineResults, [result.pipeline]: result } })),
-  setNdviTest: (ndviTest) => set({ ndviTest }),
+  setSamples: (metadata, quality) => set({ metadata, quality }),
   selectTarget: (selectedTargetId) => set({ selectedTargetId }),
   toggleLayer: (id) =>
     set((s) => {
-      const target = s.layers.find((l) => l.id === id);
-      if (!target || !target.available) return s;
-      if (target.group === "basemap") {
+      const layer = s.layers.find((l) => l.id === id);
+      if (!layer || !layer.available) return s;
+      if (layer.group === "basemap") {
         return {
           layers: s.layers.map((l) =>
             l.group === "basemap" ? { ...l, visible: l.id === id } : l,
           ),
         };
       }
-      return {
-        layers: s.layers.map((l) => (l.id === id ? { ...l, visible: !l.visible } : l)),
-      };
+      return { layers: s.layers.map((l) => (l.id === id ? { ...l, visible: !l.visible } : l)) };
     }),
   setLayerOpacity: (id, opacity) =>
     set((s) => ({ layers: s.layers.map((l) => (l.id === id ? { ...l, opacity } : l)) })),
@@ -307,8 +311,9 @@ export const useAnalysisStore = create<AnalysisState>((set) => ({
     set({
       analysisId: null,
       analysisStatus: "idle",
+      analysisStage: "idle",
       analysisMessage: null,
-      processingTimeS: null,
+      progress: null,
       startedAt: null,
       completedAt: null,
       stages: DEFAULT_STAGES,
@@ -316,9 +321,9 @@ export const useAnalysisStore = create<AnalysisState>((set) => ({
       targets: [],
       targetsReported: false,
       selectedTargetId: null,
-      pipelineResults: {},
-      ndviTest: null,
+      metadata: null,
+      quality: null,
       errors: [],
-      layers: initialLayers,
+      layers: initialLayers(),
     }),
 }));
