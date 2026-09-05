@@ -1,6 +1,11 @@
-import { apiFetch } from "@/lib/api/client";
+import { apiFetch, getApiBaseUrl } from "@/lib/api/client";
+import type { ScientificReport } from "@/lib/api/types";
 
-/** GET /analysis/{id}/report — reports exist only for completed backend runs. */
+/** GET /reports/{id} — reports exist only for completed backend runs. */
 export const reportService = {
-  get: (analysisId: string) => apiFetch<unknown>(`/analysis/${analysisId}/report`),
+  get: (analysisId: string) =>
+    apiFetch<ScientificReport>(`/reports/${analysisId}`, { timeoutMs: 30000 }),
+
+  /** GET /reports/{id}/pdf — served by the backend, never generated here. */
+  pdfUrl: (analysisId: string) => `${getApiBaseUrl()}/reports/${analysisId}/pdf`,
 };
