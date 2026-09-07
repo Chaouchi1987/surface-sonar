@@ -103,17 +103,7 @@ function Workstation() {
     async (analysisId: string) => {
       try {
         const manifest = await analysisService.datasets(analysisId);
-        setDatasets(
-          (manifest.datasets ?? []).map((d, i) => ({
-            id: d.id ?? `dataset-${i}`,
-            name: d.name,
-            family: d.family ?? "optical",
-            provider: d.provider ?? "—",
-            status: d.status,
-            ...(d.resolution_m !== undefined ? { resolution_m: d.resolution_m } : {}),
-            ...(d.note ? { note: d.note } : {}),
-          })),
-        );
+        setDatasets(manifest.datasets ?? []);
       } catch (error) {
         if (!isNotImplemented(error)) setAnalysisError(message(error));
       }
@@ -131,9 +121,17 @@ function Workstation() {
       } catch (error) {
         if (!isNotImplemented(error)) setAnalysisError(message(error));
       }
+
+      try {
+        const samples = await analysisService.samples(analysisId);
+        setSamples(samples.metadata ?? {}, samples.quality ?? {});
+      } catch (error) {
+        if (!isNotImplemented(error)) setAnalysisError(message(error));
+      }
     },
-    [applyBackendLayers, setAnalysisError, setDatasets, setTargets],
+    [applyBackendLayers, setAnalysisError, setDatasets, setSamples, setTargets],
   );
+
 
   const poll = useCallback(
     (analysisId: string) => {
