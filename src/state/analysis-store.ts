@@ -110,6 +110,7 @@ const BASEMAP_LAYERS: MapLayerState[] = [
     id: "satellite",
     name: "Satellite imagery",
     group: "basemap",
+    kind: "basemap",
     visible: true,
     opacity: 1,
     available: true,
@@ -118,11 +119,13 @@ const BASEMAP_LAYERS: MapLayerState[] = [
     id: "terrain",
     name: "Dark terrain",
     group: "basemap",
+    kind: "basemap",
     visible: false,
     opacity: 1,
     available: true,
   },
 ];
+
 
 const initialLayers = (): MapLayerState[] => BASEMAP_LAYERS.map((l) => ({ ...l }));
 
