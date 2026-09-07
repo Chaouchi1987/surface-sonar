@@ -201,15 +201,30 @@ export interface DatasetManifestResponse {
 /* ------------------------------------------------------------------ layers */
 
 /**
- * GET /analysis/{id}/layers. The backend returns vector/point result layers
- * with counts — it does not serve raster tile templates.
+ * GET /analysis/{id}/layers.
+ *
+ * The backend returns two kinds of layers:
+ *  - vector/point result layers, described by a feature `count`;
+ *  - real raster layers (v0.4.0-sentinel2-ndvi), described by a Google Earth
+ *    Engine `tile_url` plus display range and resolution.
+ * Every field below is one the backend actually emits; none is synthesised.
  */
 export interface LayerDescriptor {
   id: string;
   name: string;
-  type: "points" | "geojson" | string;
-  count: number;
+  type: "points" | "geojson" | "raster" | string;
+  /** Vector layers only. */
+  count?: number;
+  /** Raster layers only — Earth Engine XYZ tile template. */
+  tile_url?: string;
+  opacity?: number;
+  min?: number;
+  max?: number;
+  resolution_m?: number;
+  /** Backend-computed statistics for the raster; never generated here. */
+  statistics?: Record<string, number | string | null>;
 }
+
 
 export interface LayersResponse {
   layers: LayerDescriptor[];

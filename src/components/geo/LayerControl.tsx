@@ -5,13 +5,9 @@ import { cn } from "@/lib/utils";
 
 const GROUP_LABELS: Record<string, string> = {
   basemap: "Basemap",
-  spectral: "Spectral",
-  terrain: "Terrain",
-  radar: "Radar",
-  thermal: "Thermal",
-  analysis: "Analysis",
-  vector: "Vector",
+  result: "Backend result layers",
 };
+
 
 export function LayerControl() {
   const [open, setOpen] = useState(true);
@@ -65,7 +61,7 @@ export function LayerControl() {
                           </span>
                         )}
                       </div>
-                      {l.available && l.visible && l.group !== "vector" && (
+                      {l.available && l.visible && l.kind !== "vector" && (
                         <input
                           type="range"
                           aria-label={`${l.name} opacity`}

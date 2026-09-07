@@ -55,8 +55,10 @@ export function SectionPanel({
   onRunAnalysis: () => void;
   running: boolean;
 }) {
-  const { datasets, errors, analysisId, analysisStatus, completedAt, processingTimeS, health } =
+  const { datasets, errors, analysisId, analysisStatus, completedAt, metadata, earthEngine } =
     useAnalysisStore();
+  const processingTimeS = metadata?.duration_seconds;
+
 
   return (
     <div className="w-[320px] shrink-0 overflow-y-auto border-r border-border bg-panel p-4">
@@ -122,13 +124,13 @@ export function SectionPanel({
           title="Analysis"
           rows={[
             ["Engine", "External Python / FastAPI"],
-            ["Earth Engine", health?.earth_engine ? "Connected" : "Unverified"],
-            ["EE project", health?.earth_engine_project ?? "—"],
-            ["Ensemble", "Isolation Forest · LOF · Z-Score · PCA distance"],
-            ["Clustering", "DBSCAN (spatial zones)"],
-            ["Multi-scale", "10 / 20 / 50 / 100 / 200 / 300 / 500 m"],
+            ["Earth Engine", earthEngine?.status ?? "Unverified"],
+            ["EE project", earthEngine?.project ?? "—"],
+            ["Analysis scales", "10 / 20 / 30 / 40 / 50 m"],
+            ["Analysis ID", analysisId ?? "—"],
           ]}
-          note="Weights are defined and applied by the backend methodology and are configurable there."
+          note="Detection methods, weights and suppression rules are defined and applied by the backend."
+
         />
       )}
 

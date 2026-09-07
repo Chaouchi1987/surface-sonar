@@ -34,12 +34,21 @@ export interface MapLayerState {
   id: string;
   name: string;
   group: "basemap" | "result";
+  kind: "basemap" | "raster" | "vector";
   visible: boolean;
   opacity: number;
-  /** Result layers only exist once the backend reports them. */
+  /** Result layers only exist once the backend reports real content. */
   available: boolean;
+  /** Vector layers: feature count reported by the backend. */
   count?: number;
+  /** Raster layers: the Earth Engine tile template returned by the backend. */
+  tileUrl?: string;
+  min?: number;
+  max?: number;
+  resolutionM?: number;
+  statistics?: Record<string, number | string | null>;
 }
+
 
 /**
  * The pipeline the backend worker actually executes
@@ -101,6 +110,7 @@ const BASEMAP_LAYERS: MapLayerState[] = [
     id: "satellite",
     name: "Satellite imagery",
     group: "basemap",
+    kind: "basemap",
     visible: true,
     opacity: 1,
     available: true,
@@ -109,11 +119,13 @@ const BASEMAP_LAYERS: MapLayerState[] = [
     id: "terrain",
     name: "Dark terrain",
     group: "basemap",
+    kind: "basemap",
     visible: false,
     opacity: 1,
     available: true,
   },
 ];
+
 
 const initialLayers = (): MapLayerState[] => BASEMAP_LAYERS.map((l) => ({ ...l }));
 
@@ -267,18 +279,30 @@ export const useAnalysisStore = create<AnalysisState>((set) => ({
       const basemaps = s.layers.filter((l) => l.group === "basemap");
       const results: MapLayerState[] = backendLayers.map((b) => {
         const existing = s.layers.find((l) => l.id === b.id);
+        const tileUrl = typeof b.tile_url === "string" && b.tile_url ? b.tile_url : undefined;
+        const isRaster = tileUrl !== undefined;
+        // Raster layers are usable when the backend supplied a real tile URL;
+        // vector layers when the backend reported at least one feature.
+        const available = isRaster ? true : (b.count ?? 0) > 0;
         return {
           id: b.id,
           name: b.name || b.id,
-          group: "result",
-          visible: existing?.visible ?? b.count > 0,
-          opacity: existing?.opacity ?? 1,
-          available: b.count > 0,
-          count: b.count,
+          group: "result" as const,
+          kind: (isRaster ? "raster" : "vector") as MapLayerState["kind"],
+          visible: existing?.visible ?? available,
+          opacity: existing?.opacity ?? (typeof b.opacity === "number" ? b.opacity : 1),
+          available,
+          ...(b.count !== undefined ? { count: b.count } : {}),
+          ...(tileUrl ? { tileUrl } : {}),
+          ...(typeof b.min === "number" ? { min: b.min } : {}),
+          ...(typeof b.max === "number" ? { max: b.max } : {}),
+          ...(typeof b.resolution_m === "number" ? { resolutionM: b.resolution_m } : {}),
+          ...(b.statistics ? { statistics: b.statistics } : {}),
         };
       });
       return { layers: [...basemaps, ...results] };
     }),
+
   setTargets: (targets) =>
     set(() => {
       const sorted = sortTargets(targets);

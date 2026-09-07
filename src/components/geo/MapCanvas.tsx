@@ -1,6 +1,14 @@
 import { useEffect } from "react";
 import "leaflet/dist/leaflet.css";
-import { Circle, MapContainer, Rectangle, ScaleControl, TileLayer, useMap, useMapEvents } from "react-leaflet";
+import {
+  Circle,
+  MapContainer,
+  Rectangle,
+  ScaleControl,
+  TileLayer,
+  useMap,
+  useMapEvents,
+} from "react-leaflet";
 import { useAnalysisStore } from "@/state/analysis-store";
 import { boxAround } from "@/lib/geo";
 
@@ -40,6 +48,11 @@ export default function MapCanvas() {
   const targetsVisible = layers.find((l) => l.id === "targets")?.visible ?? false;
   const boxesVisible = layers.find((l) => l.id === "target_boxes")?.visible ?? false;
 
+  /** Raster overlays come exclusively from the backend tile templates. */
+  const rasterLayers = layers.filter(
+    (l) => l.kind === "raster" && l.available && l.visible && !!l.tileUrl,
+  );
+
   return (
     <MapContainer
       center={[aoi.centerLat ?? 30, aoi.centerLon ?? 5]}
@@ -49,6 +62,17 @@ export default function MapCanvas() {
       preferCanvas
     >
       <TileLayer url={basemap.url} attribution={basemap.attribution} maxZoom={19} />
+
+      {rasterLayers.map((l) => (
+        <TileLayer
+          key={l.id}
+          url={l.tileUrl as string}
+          opacity={l.opacity}
+          maxZoom={19}
+          attribution="Analysis raster © Google Earth Engine / Copernicus Sentinel data"
+        />
+      ))}
+
       <ScaleControl position="bottomleft" imperial={false} />
       <ClickHandler />
       <Recenter lat={aoi.centerLat} lon={aoi.centerLon} />
@@ -71,7 +95,7 @@ export default function MapCanvas() {
           <Circle
             key={t.target_id}
             center={[t.latitude, t.longitude]}
-            radius={Math.max(6, (t.size_m ?? 10) / 2)}
+            radius={Math.max(6, (t.box_size_m ?? 10) / 2)}
             eventHandlers={{ click: () => selectTarget(t.target_id) }}
             pathOptions={{
               color: t.rank === 1 ? "#F59E0B" : "#19B5FE",
@@ -85,7 +109,7 @@ export default function MapCanvas() {
         targets.map((t) => (
           <Rectangle
             key={`${t.target_id}-box`}
-            bounds={boxAround(t.latitude, t.longitude, 10)}
+            bounds={boxAround(t.latitude, t.longitude, t.box_size_m ?? 10)}
             pathOptions={{ color: "#22D3EE", weight: 1, fill: false, dashArray: "3 3" }}
           />
         ))}
