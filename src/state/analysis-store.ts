@@ -279,18 +279,30 @@ export const useAnalysisStore = create<AnalysisState>((set) => ({
       const basemaps = s.layers.filter((l) => l.group === "basemap");
       const results: MapLayerState[] = backendLayers.map((b) => {
         const existing = s.layers.find((l) => l.id === b.id);
+        const tileUrl = typeof b.tile_url === "string" && b.tile_url ? b.tile_url : undefined;
+        const isRaster = tileUrl !== undefined;
+        // Raster layers are usable when the backend supplied a real tile URL;
+        // vector layers when the backend reported at least one feature.
+        const available = isRaster ? true : (b.count ?? 0) > 0;
         return {
           id: b.id,
           name: b.name || b.id,
-          group: "result",
-          visible: existing?.visible ?? b.count > 0,
-          opacity: existing?.opacity ?? 1,
-          available: b.count > 0,
-          count: b.count,
+          group: "result" as const,
+          kind: (isRaster ? "raster" : "vector") as MapLayerState["kind"],
+          visible: existing?.visible ?? available,
+          opacity: existing?.opacity ?? (typeof b.opacity === "number" ? b.opacity : 1),
+          available,
+          ...(b.count !== undefined ? { count: b.count } : {}),
+          ...(tileUrl ? { tileUrl } : {}),
+          ...(typeof b.min === "number" ? { min: b.min } : {}),
+          ...(typeof b.max === "number" ? { max: b.max } : {}),
+          ...(typeof b.resolution_m === "number" ? { resolutionM: b.resolution_m } : {}),
+          ...(b.statistics ? { statistics: b.statistics } : {}),
         };
       });
       return { layers: [...basemaps, ...results] };
     }),
+
   setTargets: (targets) =>
     set(() => {
       const sorted = sortTargets(targets);
