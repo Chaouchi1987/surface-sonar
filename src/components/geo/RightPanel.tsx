@@ -277,9 +277,10 @@ function ScoreRow({
   suffix = "",
 }: {
   label: string;
-  value?: number | null;
-  suffix?: string;
+  value?: number | null | undefined;
+  suffix?: string | undefined;
 }) {
+
   return (
     <div className="flex items-baseline justify-between gap-3">
       <dt className="label-tech">{label}</dt>
