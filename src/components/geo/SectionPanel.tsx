@@ -55,8 +55,10 @@ export function SectionPanel({
   onRunAnalysis: () => void;
   running: boolean;
 }) {
-  const { datasets, errors, analysisId, analysisStatus, completedAt, processingTimeS, health } =
+  const { datasets, errors, analysisId, analysisStatus, completedAt, metadata, earthEngine } =
     useAnalysisStore();
+  const processingTimeS = metadata?.duration_seconds;
+
 
   return (
     <div className="w-[320px] shrink-0 overflow-y-auto border-r border-border bg-panel p-4">
