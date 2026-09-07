@@ -34,12 +34,21 @@ export interface MapLayerState {
   id: string;
   name: string;
   group: "basemap" | "result";
+  kind: "basemap" | "raster" | "vector";
   visible: boolean;
   opacity: number;
-  /** Result layers only exist once the backend reports them. */
+  /** Result layers only exist once the backend reports real content. */
   available: boolean;
+  /** Vector layers: feature count reported by the backend. */
   count?: number;
+  /** Raster layers: the Earth Engine tile template returned by the backend. */
+  tileUrl?: string;
+  min?: number;
+  max?: number;
+  resolutionM?: number;
+  statistics?: Record<string, number | string | null>;
 }
+
 
 /**
  * The pipeline the backend worker actually executes
