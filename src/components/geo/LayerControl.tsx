@@ -61,7 +61,7 @@ export function LayerControl() {
                           </span>
                         )}
                       </div>
-                      {l.available && l.visible && l.group !== "vector" && (
+                      {l.available && l.visible && l.kind !== "vector" && (
                         <input
                           type="range"
                           aria-label={`${l.name} opacity`}
