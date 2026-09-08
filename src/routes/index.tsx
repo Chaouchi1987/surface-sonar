@@ -64,6 +64,7 @@ function Workstation() {
     setDatasets,
     applyBackendLayers,
     setTargets,
+    setSamples,
     setAnalysisError,
     clearErrors,
     resetAnalysis,
@@ -172,9 +173,8 @@ function Workstation() {
         latitude: aoi.centerLat,
         longitude: aoi.centerLon,
         radius_m: aoi.radiusM,
-        name: aoi.name,
         scale_m: aoi.scaleM,
-        shape: aoi.shape,
+        geometry_type: aoi.geometryType,
       });
       setServerAoi(serverAoi);
 
@@ -182,7 +182,9 @@ function Workstation() {
       const started = await analysisService.start({
         aoi_id: serverAoi.aoi_id,
         scale_m: aoi.scaleM,
-        datasets: [],
+        start_date: aoi.startDate,
+        end_date: aoi.endDate,
+        cloud_pct: aoi.cloudPct,
       });
       setAnalysisId(started.analysis_id);
 
