@@ -167,6 +167,10 @@ interface AnalysisState {
   selectedTargetId: string | null;
   metadata: AnalysisMetadata | null;
   quality: FeatureQuality | null;
+  /** Raw sample rows returned by GET /analysis/{id}/samples. */
+  samples: Record<string, unknown>[];
+  /** Artefacts the backend did NOT return for a completed run. */
+  resultIssues: string[];
 
   errors: string[];
   apiLog: ApiLogEntry[];
@@ -184,7 +188,12 @@ interface AnalysisState {
   setDatasets: (datasets: DatasetInfo[]) => void;
   applyBackendLayers: (layers: LayerDescriptor[]) => void;
   setTargets: (targets: Target[]) => void;
-  setSamples: (metadata: AnalysisMetadata, quality: FeatureQuality) => void;
+  setSamples: (
+    metadata: AnalysisMetadata,
+    quality: FeatureQuality,
+    samples?: Record<string, unknown>[],
+  ) => void;
+  setResultIssues: (issues: string[]) => void;
   selectTarget: (id: string | null) => void;
   toggleLayer: (id: string) => void;
   setLayerOpacity: (id: string, opacity: number) => void;
@@ -192,6 +201,7 @@ interface AnalysisState {
   clearLog: () => void;
   resetAnalysis: () => void;
 }
+
 
 function defaultWindow(): { startDate: string; endDate: string } {
   const end = new Date();
@@ -241,6 +251,9 @@ export const useAnalysisStore = create<AnalysisState>((set) => ({
   selectedTargetId: null,
   metadata: null,
   quality: null,
+  samples: [],
+  resultIssues: [],
+
 
   errors: [],
   apiLog: [],
@@ -312,7 +325,10 @@ export const useAnalysisStore = create<AnalysisState>((set) => ({
         selectedTargetId: sorted[0]?.target_id ?? null,
       };
     }),
-  setSamples: (metadata, quality) => set({ metadata, quality }),
+  setSamples: (metadata, quality, samples) =>
+    set({ metadata, quality, ...(samples ? { samples } : {}) }),
+  setResultIssues: (resultIssues) => set({ resultIssues }),
+
   selectTarget: (selectedTargetId) => set({ selectedTargetId }),
   toggleLayer: (id) =>
     set((s) => {
@@ -347,7 +363,10 @@ export const useAnalysisStore = create<AnalysisState>((set) => ({
       selectedTargetId: null,
       metadata: null,
       quality: null,
+      samples: [],
+      resultIssues: [],
       errors: [],
+
       layers: initialLayers(),
     }),
 }));
