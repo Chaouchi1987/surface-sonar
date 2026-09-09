@@ -251,6 +251,9 @@ export const useAnalysisStore = create<AnalysisState>((set) => ({
   selectedTargetId: null,
   metadata: null,
   quality: null,
+  samples: [],
+  resultIssues: [],
+
 
   errors: [],
   apiLog: [],
@@ -322,7 +325,10 @@ export const useAnalysisStore = create<AnalysisState>((set) => ({
         selectedTargetId: sorted[0]?.target_id ?? null,
       };
     }),
-  setSamples: (metadata, quality) => set({ metadata, quality }),
+  setSamples: (metadata, quality, samples) =>
+    set({ metadata, quality, ...(samples ? { samples } : {}) }),
+  setResultIssues: (resultIssues) => set({ resultIssues }),
+
   selectTarget: (selectedTargetId) => set({ selectedTargetId }),
   toggleLayer: (id) =>
     set((s) => {
@@ -357,7 +363,10 @@ export const useAnalysisStore = create<AnalysisState>((set) => ({
       selectedTargetId: null,
       metadata: null,
       quality: null,
+      samples: [],
+      resultIssues: [],
       errors: [],
+
       layers: initialLayers(),
     }),
 }));
