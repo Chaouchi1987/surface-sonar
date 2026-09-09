@@ -65,6 +65,7 @@ function Workstation() {
     applyBackendLayers,
     setTargets,
     setSamples,
+    setResultIssues,
     setAnalysisError,
     clearErrors,
     resetAnalysis,
@@ -102,17 +103,24 @@ function Workstation() {
   /** Fetch backend-produced artefacts. Nothing is synthesised when absent. */
   const loadResults = useCallback(
     async (analysisId: string) => {
+      /** Anything the backend failed to deliver is reported, never filled in. */
+      const issues: string[] = [];
+
       try {
         const manifest = await analysisService.datasets(analysisId);
         setDatasets(manifest.datasets ?? []);
+        if (!manifest.datasets?.length) issues.push("No dataset manifest returned.");
       } catch (error) {
+        issues.push(`Datasets unavailable: ${message(error)}`);
         if (!isNotImplemented(error)) setAnalysisError(message(error));
       }
 
       try {
         const layers = await layerService.list(analysisId);
         applyBackendLayers(layers.layers ?? []);
+        if (!layers.layers?.length) issues.push("No map layers returned.");
       } catch (error) {
+        issues.push(`Layers unavailable: ${message(error)}`);
         if (!isNotImplemented(error)) setAnalysisError(message(error));
       }
 
@@ -120,17 +128,29 @@ function Workstation() {
         const targets = await targetService.list(analysisId);
         setTargets(targets.targets ?? []);
       } catch (error) {
+        issues.push(`Targets unavailable: ${message(error)}`);
         if (!isNotImplemented(error)) setAnalysisError(message(error));
       }
 
       try {
         const samples = await analysisService.samples(analysisId);
-        setSamples(samples.metadata ?? {}, samples.quality ?? {});
+        setSamples(samples.metadata ?? {}, samples.quality ?? {}, samples.samples ?? []);
+        if (!samples.samples?.length) issues.push("No sampled feature cells returned.");
       } catch (error) {
+        issues.push(`Samples unavailable: ${message(error)}`);
         if (!isNotImplemented(error)) setAnalysisError(message(error));
       }
+
+      setResultIssues(issues);
     },
-    [applyBackendLayers, setAnalysisError, setDatasets, setSamples, setTargets],
+    [
+      applyBackendLayers,
+      setAnalysisError,
+      setDatasets,
+      setResultIssues,
+      setSamples,
+      setTargets,
+    ],
   );
 
 

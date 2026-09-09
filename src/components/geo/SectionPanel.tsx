@@ -2,9 +2,6 @@ import {
   Activity,
   Database,
   FileText,
-  History,
-  Mountain,
-  ScanLine,
   Settings as SettingsIcon,
   Target as TargetIcon,
 } from "lucide-react";
