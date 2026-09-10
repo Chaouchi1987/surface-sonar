@@ -450,16 +450,20 @@ export const useAnalysisStore = create<AnalysisState>((set) => ({
     }),
 
   setTargets: (targets) =>
-    set(() => {
+    set((s) => {
       const sorted = sortTargets(targets);
       return {
         targets: sorted,
         targetsReported: true,
         selectedTargetId: sorted[0]?.target_id ?? null,
+        stages: restage(s, { targets: sorted }),
       };
     }),
   setSamples: (metadata, quality, samples) =>
-    set({ metadata, quality, ...(samples ? { samples } : {}) }),
+    set((s) => {
+      const patch = { metadata, quality, ...(samples ? { samples } : {}) };
+      return { ...patch, stages: restage(s, patch) };
+    }),
   setResultIssues: (resultIssues) => set({ resultIssues }),
 
   selectTarget: (selectedTargetId) => set({ selectedTargetId }),
@@ -490,6 +494,7 @@ export const useAnalysisStore = create<AnalysisState>((set) => ({
       startedAt: null,
       completedAt: null,
       stages: DEFAULT_STAGES,
+      lastStatus: null,
       datasets: [],
       targets: [],
       targetsReported: false,
