@@ -115,15 +115,20 @@ export function ReportsPanel() {
                 )
               }
             />
-            <a
-              href={reportService.pdfUrl(analysisId)}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center justify-center gap-1.5 rounded-md border border-border px-2 py-1.5 text-[11.5px] text-secondary-foreground hover:bg-elevated"
-            >
-              <Download className="h-3 w-3" /> PDF
-            </a>
+            <ExportButton
+              label={pdfChecking ? "Checking PDF…" : "PDF"}
+              disabled={pdfChecking || pdfAvailable === false}
+              onClick={() => void openPdf()}
+            />
           </div>
+
+          {pdfAvailable === false && (
+            <p className="rounded-md border border-border bg-background/40 p-2.5 text-[10.5px] leading-relaxed text-muted-foreground">
+              The backend does not serve a PDF for this run ({pdfError}). PDF export is disabled;
+              use the JSON, CSV or GeoJSON exports above.
+            </p>
+          )}
+
 
           <p className="rounded-md border border-border bg-background/40 p-2.5 text-[10.5px] leading-relaxed text-muted-foreground">
             Exports contain backend results only ({targets.length} target
