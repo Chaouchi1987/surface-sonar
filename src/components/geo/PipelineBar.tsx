@@ -36,7 +36,7 @@ export function PipelineBar({ stages }: { stages: PipelineStage[] }) {
                   ? "border-accent/50 bg-accent/10"
                   : "border-border bg-background/50",
               )}
-              title={stage.message}
+              title={stage.message ?? `${stage.label}: ${stage.status}`}
             >
               <Icon
                 className={cn(
@@ -45,7 +45,19 @@ export function PipelineBar({ stages }: { stages: PipelineStage[] }) {
                   stage.status === "running" && "animate-spin",
                 )}
               />
-              <span className="text-[11.5px] text-secondary-foreground">{stage.label}</span>
+              <span
+                className={cn(
+                  "text-[11.5px] text-secondary-foreground",
+                  stage.status === "skipped" && "text-muted-foreground",
+                )}
+              >
+                {stage.label}
+                {stage.status === "skipped" && (
+                  <span className="ml-1 text-[10px] uppercase tracking-wide text-warning">
+                    not reported
+                  </span>
+                )}
+              </span>
             </div>
             {i < stages.length - 1 && (
               <span className="mx-1 h-px w-4 bg-border" aria-hidden />
