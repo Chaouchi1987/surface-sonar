@@ -66,7 +66,7 @@ export function SectionPanel({
     resultIssues,
     samples,
   } = useAnalysisStore();
-  const processingTimeS = metadata?.duration_seconds;
+  const processingTimeS = processingSeconds(metadata?.duration_seconds, startedAt, completedAt);
   const resultLayers = layers.filter((l) => l.group === "result");
   const reportedNames = new Set(datasets.map((d) => d.name.toLowerCase()));
 

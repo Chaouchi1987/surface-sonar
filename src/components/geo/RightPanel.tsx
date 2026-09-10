@@ -27,7 +27,7 @@ export function RightPanel() {
   } = useAnalysisStore();
   const selected = targets.find((t) => t.target_id === selectedTargetId) ?? targets[0] ?? null;
   const activeLayers = layers.filter((l) => l.visible);
-  const processingTimeS = metadata?.duration_seconds;
+  const processingTimeS = processingSeconds(metadata?.duration_seconds, startedAt, completedAt);
 
   return (
     <aside
