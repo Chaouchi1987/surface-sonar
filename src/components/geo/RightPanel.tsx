@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import type { Target } from "@/lib/api/types";
 import { useAnalysisStore } from "@/state/analysis-store";
-import { boxAround, formatCoord } from "@/lib/geo";
+import { boxAround, formatCoord, processingSeconds } from "@/lib/geo";
 import { cn } from "@/lib/utils";
 import { EvidenceBars } from "./EvidenceBars";
 
@@ -22,12 +22,13 @@ export function RightPanel() {
     layers,
     datasets,
     metadata,
+    startedAt,
     completedAt,
     targetsReported,
   } = useAnalysisStore();
   const selected = targets.find((t) => t.target_id === selectedTargetId) ?? targets[0] ?? null;
   const activeLayers = layers.filter((l) => l.visible);
-  const processingTimeS = metadata?.duration_seconds;
+  const processingTimeS = processingSeconds(metadata?.duration_seconds, startedAt, completedAt);
 
   return (
     <aside
