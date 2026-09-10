@@ -15,6 +15,32 @@ export function ReportsPanel() {
   const [report, setReport] = useState<ScientificReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** null = not probed yet. The PDF action stays disabled once the backend 404s. */
+  const [pdfAvailable, setPdfAvailable] = useState<boolean | null>(null);
+  const [pdfChecking, setPdfChecking] = useState(false);
+  const [pdfError, setPdfError] = useState<string>("");
+
+  const openPdf = useCallback(async () => {
+    if (!analysisId) return;
+    const url = reportService.pdfUrl(analysisId);
+    setPdfChecking(true);
+    try {
+      const res = await fetch(url, { method: "GET" });
+      if (!res.ok) {
+        setPdfAvailable(false);
+        setPdfError(`HTTP ${res.status}`);
+        return;
+      }
+      setPdfAvailable(true);
+      const blobUrl = URL.createObjectURL(await res.blob());
+      window.open(blobUrl, "_blank", "noopener");
+    } catch (e) {
+      setPdfAvailable(false);
+      setPdfError(e instanceof Error ? e.message : "request failed");
+    } finally {
+      setPdfChecking(false);
+    }
+  }, [analysisId]);
 
   const load = useCallback(async () => {
     if (!analysisId) return;
