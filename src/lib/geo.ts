@@ -36,3 +36,23 @@ export function formatArea(m2: number): string {
 }
 
 export const INVESTIGATION_SCALES_M = [10, 20, 50, 100, 200, 300, 500] as const;
+
+/**
+ * Real processing time only: the backend-reported duration_seconds, or the
+ * span between real started_at/completed_at timestamps. Never estimated.
+ */
+export function processingSeconds(
+  durationSeconds: number | undefined,
+  startedAt: string | null | undefined,
+  completedAt: string | null | undefined,
+): number | null {
+  if (typeof durationSeconds === "number" && Number.isFinite(durationSeconds)) {
+    return durationSeconds;
+  }
+  if (startedAt && completedAt) {
+    const a = Date.parse(startedAt);
+    const b = Date.parse(completedAt);
+    if (Number.isFinite(a) && Number.isFinite(b) && b >= a) return (b - a) / 1000;
+  }
+  return null;
+}

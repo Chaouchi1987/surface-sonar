@@ -15,7 +15,7 @@ import { DebugPanel } from "./DebugPanel";
 import { AnalysisErrorCard } from "./AnalysisErrorCard";
 import { FeatureDomainSection } from "./FeatureDomainSection";
 import { ReportsPanel } from "./ReportsPanel";
-import { formatCoord } from "@/lib/geo";
+import { formatCoord, processingSeconds } from "@/lib/geo";
 
 /**
  * Reference catalogue of the sources the platform can consume. It is only used
@@ -56,6 +56,7 @@ export function SectionPanel({
     errors,
     analysisId,
     analysisStatus,
+    startedAt,
     completedAt,
     metadata,
     quality,
