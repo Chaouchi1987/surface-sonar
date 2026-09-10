@@ -374,6 +374,7 @@ export const useAnalysisStore = create<AnalysisState>((set) => ({
   startedAt: null,
   completedAt: null,
   stages: DEFAULT_STAGES,
+  lastStatus: null,
 
   datasets: [],
   layers: initialLayers(),
@@ -407,7 +408,7 @@ export const useAnalysisStore = create<AnalysisState>((set) => ({
   setAnalysisId: (analysisId) =>
     set({ analysisId, analysisStatus: "queued", analysisStage: "queued" }),
   applyStatus: (status) =>
-    set({
+    set((s) => ({
       analysisId: status.analysis_id,
       analysisStatus: status.status,
       analysisStage: status.stage,
@@ -415,9 +416,10 @@ export const useAnalysisStore = create<AnalysisState>((set) => ({
       progress: status.progress ?? null,
       startedAt: status.started_at ?? null,
       completedAt: status.completed_at ?? null,
-      stages: stagesFromBackend(status),
-    }),
-  setDatasets: (datasets) => set({ datasets }),
+      lastStatus: status,
+      stages: stagesFromBackend(status, evidenceFrom(s)),
+    })),
+  setDatasets: (datasets) => set((s) => ({ datasets, stages: restage(s, { datasets }) })),
   applyBackendLayers: (backendLayers) =>
     set((s) => {
       const basemaps = s.layers.filter((l) => l.group === "basemap");
