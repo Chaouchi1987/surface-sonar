@@ -269,6 +269,8 @@ interface AnalysisState {
   startedAt: string | null;
   completedAt: string | null;
   stages: PipelineStage[];
+  /** Last raw status record, so stages can be re-derived as artefacts arrive. */
+  lastStatus: AnalysisStatusResponse | null;
 
   datasets: DatasetInfo[];
   layers: MapLayerState[];
@@ -312,6 +314,25 @@ interface AnalysisState {
   resetAnalysis: () => void;
 }
 
+/** Collects the artefacts the backend actually returned for the current run. */
+function evidenceFrom(s: AnalysisState): StageEvidence {
+  const keys = new Set<string>(Object.keys(s.quality?.by_feature ?? {}));
+  for (const row of s.samples) for (const k of Object.keys(row)) keys.add(k);
+  const modules = s.metadata?.optional_modules;
+  return {
+    datasets: s.datasets,
+    featureKeys: Array.from(keys),
+    optionalModules: modules && typeof modules === "object" ? modules : {},
+    hasTargets: s.targets.length > 0,
+  };
+}
+
+/** Re-derives the pipeline bar from the last backend status plus artefacts. */
+function restage(s: AnalysisState, patch: Partial<AnalysisState>): PipelineStage[] {
+  const next = { ...s, ...patch } as AnalysisState;
+  if (!next.lastStatus) return next.stages;
+  return stagesFromBackend(next.lastStatus, evidenceFrom(next));
+}
 
 function defaultWindow(): { startDate: string; endDate: string } {
   const end = new Date();
