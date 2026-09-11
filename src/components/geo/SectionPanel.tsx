@@ -170,7 +170,7 @@ export function SectionPanel({
             <div>
               <p className="label-tech">Not reported by this run</p>
               <ul className="mt-1 space-y-1">
-                {REFERENCE_SOURCES.filter((n) => !reportedNames.has(n.toLowerCase())).map((n) => (
+                {REFERENCE_SOURCES.filter((n) => !isReported(n)).map((n) => (
                   <li
                     key={n}
                     className="flex items-center justify-between rounded border border-border px-2 py-1"
