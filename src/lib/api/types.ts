@@ -140,6 +140,12 @@ export type AnalysisRunStatus = "queued" | "running" | "completed" | "failed";
 export type BackendStage =
   | "queued"
   | "acquisition"
+  /** v0.5.x alias of acquisition. */
+  | "multisource_acquisition"
+  /** v0.5.x grid sampling stage. */
+  | "spatial_sampling"
+  /** v0.5.x alias of anomaly_ensemble. */
+  | "anomaly_screening"
   | "spectral_dem"
   | "anomaly_ensemble"
   | "legacy_scientific_audit"
@@ -289,9 +295,20 @@ export interface Target {
   box_geojson?: GeoJsonFeature;
   box_size_m: number;
 
-  /** Fused final evidence score (0–1). */
+  /**
+   * v0.4.0: fused final evidence score (0–1).
+   * v0.5.x: screening score expressed as a percentage (0–100) when
+   * `score_type` says so. Never a probability under either contract.
+   */
   anomaly_score: number;
-  strength_percent: number;
+  /** e.g. "screening_percent" / "fused_evidence" — describes anomaly_score. */
+  score_type?: string;
+  strength_percent?: number;
+  /** Backends that cannot justify these emit null; never fabricate them. */
+  confidence?: number | null;
+  probability?: number | null;
+  /** v0.5.x explicitly flags non-synthetic results. */
+  synthetic?: boolean;
 
   zscore_score?: number;
   isolation_forest_score?: number;
@@ -345,6 +362,12 @@ export interface SamplesResponse {
 export interface AnalysisMetadata {
   synthetic?: boolean;
   analysis_scale_m?: number;
+  /** v0.5.x field names for the same quantities. */
+  scale_m?: number;
+  sampled_cells?: number;
+  candidate_cells?: number;
+  observations?: number;
+  feature_count?: number;
   start_date?: string;
   end_date?: string;
   cloud_pct?: number;
