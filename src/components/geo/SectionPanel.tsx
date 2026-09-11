@@ -69,7 +69,17 @@ export function SectionPanel({
   } = useAnalysisStore();
   const processingTimeS = processingSeconds(metadata?.duration_seconds, startedAt, completedAt);
   const resultLayers = layers.filter((l) => l.group === "result");
-  const reportedNames = new Set(datasets.map((d) => d.name.toLowerCase()));
+  const reportedNames = datasets.map((d) => d.name.toLowerCase());
+  /**
+   * A reference source counts as reported when it matches a backend dataset
+   * name in either direction ("Sentinel-2" ⊂ "Sentinel-2 SR Harmonized").
+   * Exact-match comparison caused the same dataset to appear both as
+   * available and as "not reported".
+   */
+  const isReported = (refName: string) => {
+    const ref = refName.toLowerCase();
+    return reportedNames.some((n) => n.includes(ref) || ref.includes(n));
+  };
 
   return (
     <div className="w-[320px] shrink-0 overflow-y-auto border-r border-border bg-panel p-4">
