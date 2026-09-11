@@ -58,6 +58,7 @@ export interface MapLayerState {
 export const PIPELINE_STAGES: { id: BackendStage; label: string }[] = [
   { id: "acquisition", label: "Data Acquisition" },
   { id: "spectral_dem", label: "Spectral + DEM" },
+  { id: "spatial_sampling", label: "Spatial Sampling" },
   { id: "anomaly_ensemble", label: "Anomaly Ensemble" },
   { id: "legacy_scientific_audit", label: "Scientific Audit" },
   { id: "geology", label: "Geology" },
